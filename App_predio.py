@@ -163,25 +163,52 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
+        # === CORREÇÃO DO BLOQUEIO DE CELULAR AQUI ===
         def acionar_pdf(e):
             try:
+                # Garante que a pasta existe no servidor
+                if not os.path.exists("assets"):
+                    os.makedirs("assets")
+                    
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
+                # Gera o arquivo em nuvem
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
                 
-                page.snack_bar = ft.SnackBar(ft.Text(f"✅ Relatório Gerado! Fazendo download..."), bgcolor=ft.Colors.GREEN_700, duration=4000)
-                page.snack_bar.open = True
+                # Função para fechar a janelinha quando o usuário clicar em baixar
+                def fechar_dlg_download(e):
+                    dlg_download.open = False
+                    page.update()
+
+                # Cria uma Janelinha com um link HTML nativo (infalível em celulares)
+                dlg_download = ft.AlertDialog(
+                    title=ft.Text("✅ Relatório Pronto!", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
+                    content=ft.Text("Seu arquivo PDF foi gerado e está pronto para impressão. Clique no botão abaixo para abrir/salvar."),
+                    actions=[
+                        ft.ElevatedButton(
+                            text="📥 Baixar PDF", 
+                            url=f"/{nome_pdf}", # <- O celular enxerga isso como um link normal
+                            url_target="_blank", # Tenta abrir o PDF em uma nova aba/leitor do celular
+                            bgcolor=ft.Colors.GREEN_700, 
+                            color=ft.Colors.WHITE,
+                            on_click=fechar_dlg_download
+                        )
+                    ],
+                    actions_alignment=ft.MainAxisAlignment.CENTER
+                )
+
+                page.overlay.append(dlg_download)
+                dlg_download.open = True
                 page.update()
                 
-                page.launch_url(f"/{nome_pdf}")
             except Exception as ex:
                 page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
                 page.snack_bar.open = True
                 page.update()
 
         botao_exportar = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), ft.Text("Baixar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
+            content=ft.Row([ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), ft.Text("Gerar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=ft.Colors.RED_700, padding=12, border_radius=8, ink=True, on_click=acionar_pdf
         )
 
@@ -503,7 +530,6 @@ def main(page: ft.Page):
     abrir_tela_obras()
 
 
-# === LIGAÇÃO DEFINITIVA DO MOTOR WEB ===
 # 1. Garante que a pasta assets existe antes do aplicativo ligar
 os.makedirs("assets", exist_ok=True)
 
