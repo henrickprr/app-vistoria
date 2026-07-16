@@ -1,7 +1,7 @@
 import flet as ft
 import json
 import urllib.request
-import urllib.parse # <-- Novo: Garante que o link funcione no celular
+import urllib.parse 
 import os
 from fpdf import FPDF 
 from fpdf.enums import XPos, YPos
@@ -166,7 +166,7 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # === O SEGREDO DO CELULAR ESTÁ AQUI ===
+        # === CORREÇÃO FINAL DO LINK DE DOWNLOAD ===
         def acionar_pdf(e):
             try:
                 if not os.path.exists("assets"):
@@ -175,20 +175,15 @@ def main(page: ft.Page):
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
-                # Gera o arquivo em nuvem
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
-                
-                # Transforma o nome do arquivo em um Link 100% seguro (sem espaços)
                 url_segura = f"/{urllib.parse.quote(nome_pdf)}"
                 
                 def fechar_e_baixar(e):
                     dlg_download.open = False
                     page.update()
-                    # Manda o celular abrir o link na mesma janela ("_self"). 
-                    # Isso obriga o Android/iPhone a baixar o arquivo na hora!
-                    page.launch_url(url_segura, web_window_name="_self")
+                    # Comando limpo e direto. O celular permite na hora!
+                    page.launch_url(url_segura)
 
-                # Botão construído à mão usando Container (Nunca dá erro de sintaxe)
                 botao_baixar_seguro = ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
