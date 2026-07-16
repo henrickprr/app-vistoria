@@ -220,12 +220,12 @@ def main(page: ft.Page):
         opcoes_andares = [ft.dropdown.Option(key=a, text=f"{a}º Pavimento") for a in andares_ordenados]
         dropdown_andar = ft.Dropdown(label="Filtrar por Andar", options=opcoes_andares, value=andar_inicial, expand=True)
 
-        aptos_selecionados = set() # Guarda estritamente as strings dos aptos selecionados na tela atual
+        aptos_selecionados = set() 
         grid_aptos = ft.GridView(expand=True, runs_count=4, child_aspect_ratio=1.0, spacing=10, run_spacing=10)
 
         def desenhar_grid():
             grid_aptos.controls.clear()
-            andar_alvo = dropdown_andar.value # Coleta dinamicamente do controle para evitar travar no 1º andar
+            andar_alvo = dropdown_andar.value 
             if not andar_alvo: return
             
             tarefa_atual = dropdown_tarefa.value
@@ -242,7 +242,6 @@ def main(page: ft.Page):
                 icone = ft.Icons.CHECK_CIRCLE if is_selected else None
                 opacidade = 1.0 if is_selected else (0.5 if aptos_selecionados else 1.0)
                 
-                # Encapsulamento de clique limpo por argumento padrão para isolar o escopo do loop
                 def criar_handler_clique(ap_nome=apto):
                     def toggle_selecao(e):
                         if ap_nome in aptos_selecionados:
@@ -271,7 +270,7 @@ def main(page: ft.Page):
             page.update()
 
         def mudar_andar(e):
-            aptos_selecionados.clear() # Evita aplicar dados em andares cruzados involuntariamente
+            aptos_selecionados.clear() 
             desenhar_grid()
             
         dropdown_andar.on_change = mudar_andar
@@ -294,7 +293,7 @@ def main(page: ft.Page):
         linha_filtros = ft.Row([dropdown_andar, btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         def aplicar_lote(e):
-            andar_alvo = dropdown_andar.value # Coleta em tempo de execução o andar exato selecionado
+            andar_alvo = dropdown_andar.value 
             tarefa = dropdown_tarefa.value
             if not tarefa:
                 dropdown_tarefa.error_text = "Selecione uma atividade!"
@@ -309,15 +308,13 @@ def main(page: ft.Page):
             
             status_escolhido = dropdown_status.value
             
-            # Executa a injeção diretamente na árvore correspondente do pavimento alvo
             for apt_sel in aptos_selecionados:
                 if andar_alvo in banco_dados[obra] and apt_sel in banco_dados[obra][andar_alvo]:
                     if tarefa not in banco_dados[obra][andar_alvo][apt_sel]:
-                        banco_dados[obra][andar_alvo][apt_sel][tarefa] = {"status": status_chosen, "obs": ""}
+                        banco_dados[obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
                     else:
                         banco_dados[obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
             
-            # Sincroniza sem snacks duplicados
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
             snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso no {andar_alvo}º pavimento!"), bgcolor=ft.Colors.GREEN_700)
@@ -631,7 +628,7 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_novo_apto, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_apto)])
         
         desenhar_grid()
-        page.add(cabecalho, grid_aptos, ft.Divider(), linea_add=linha_add)
+        page.add(cabecalho, grid_aptos, ft.Divider(), linha_add)
 
 
     # ==========================================
