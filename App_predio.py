@@ -190,21 +190,21 @@ def main(page: ft.Page):
                 # Devolve o botão vermelho ao estado original
                 botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
                 
-                def realizar_download(e):
-                    # O Comando exato que o Flet exigiu na mensagem de erro
-                    page.launch_url(url_segura, web_popup_window_name="_self")
-
-                # Botão azul 100% livre de parâmetros problemáticos de biblioteca
+                # A URL declarativa é tratada diretamente pelo toque no cliente
+                # Flet. Isso evita o bloqueio de pop-up dos navegadores mobile.
                 botao_download = ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
-                        ft.Text("CLIQUE AQUI PARA BAIXAR O PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
+                        ft.Text("CLIQUE AQUI PARA ABRIR O PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
                     ], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.BLUE_600,
                     padding=15,
                     border_radius=8,
                     ink=True,
-                    on_click=realizar_download
+                    url=ft.Url(
+                        url=url_segura,
+                        target=ft.UrlTarget.SELF,
+                    ),
                 )
                 
                 # Atualiza a interface injetando o novo botão abaixo do primeiro
