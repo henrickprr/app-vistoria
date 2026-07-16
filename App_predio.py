@@ -226,6 +226,7 @@ def main(page: ft.Page):
         aptos_selecionados = set()
         grid_aptos = ft.GridView(expand=True, runs_count=4, child_aspect_ratio=1.0, spacing=10, run_spacing=10)
 
+        # === NOVO SISTEMA VISUAL: SEM BORDAS PROBLEMÁTICAS ===
         def desenhar_grid():
             grid_aptos.controls.clear()
             if not andar_atual: return
@@ -241,8 +242,10 @@ def main(page: ft.Page):
                     st = banco_dados[obra][andar_atual][apto][tarefa_atual]["status"]
                     cor_fundo = get_cor_status(st)
                 
-                borda = ft.border.all(4, ft.Colors.BLACK) if is_selected else None
+                # Controle limpo: Ícone e Opacidade
                 icone = ft.Icons.CHECK_CIRCLE if is_selected else None
+                # Fica 100% visível se selecionado. Se outro estiver selecionado, fica "apagado" (0.5).
+                opacidade = 1.0 if is_selected else (0.5 if aptos_selecionados else 1.0)
                 
                 def toggle_selecao(e, a=andar_atual, ap=apto):
                     if (a, ap) in aptos_selecionados:
@@ -262,7 +265,7 @@ def main(page: ft.Page):
                     ),
                     bgcolor=cor_fundo, 
                     border_radius=8, 
-                    border=borda, 
+                    opacity=opacidade, # A mágica do efeito visual acontece aqui
                     ink=True, 
                     on_click=toggle_selecao
                 )
