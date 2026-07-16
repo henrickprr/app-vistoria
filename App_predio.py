@@ -311,7 +311,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO MÚLTIPLO POR PAVIMENTOS (CHECKBOXES)
+    # TELA 6: LANÇAMENTO MÚLTIPLO POR PAVIMENTOS
     # ==========================================
     def abrir_tela_lancamento_lote(obra):
         page.controls.clear()
@@ -371,7 +371,6 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # MÁGICA DAS CHECKBOXES: Dicionário para rastrear os andares selecionados
         checkboxes_andares = {}
         grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.0, spacing=10, run_spacing=10)
 
@@ -382,7 +381,6 @@ def main(page: ft.Page):
             grid_andares.controls.append(cb)
 
         def selecionar_todos_andares(e):
-            # Se todos já estiverem marcados, desmarca todos. Caso contrário, marca todos.
             todos_marcados = all(cb.value for cb in checkboxes_andares.values())
             for cb in checkboxes_andares.values():
                 cb.value = not todos_marcados
@@ -397,7 +395,6 @@ def main(page: ft.Page):
                 page.update()
                 return
             
-            # Descobre quais andares foram ticados nas checkboxes
             andares_selecionados = [andar for andar, cb in checkboxes_andares.items() if cb.value]
             
             if not andares_selecionados:
@@ -409,7 +406,6 @@ def main(page: ft.Page):
             
             status_escolhido = dropdown_status.value
             
-            # Aplica em TODOS os apartamentos dos andares selecionados de uma só vez
             for andar_alvo in andares_selecionados:
                 for apto in banco_dados[obra][andar_alvo].keys():
                     if tarefa not in banco_dados[obra][andar_alvo][apto]:
@@ -423,7 +419,6 @@ def main(page: ft.Page):
             page.overlay.append(snack)
             snack.open = True
             
-            # Reseta as checkboxes
             for cb in checkboxes_andares.values():
                 cb.value = False
             page.update()
@@ -603,7 +598,7 @@ def main(page: ft.Page):
                     on_click=lambda e, o=obra, a=andar, apt=numero_apto: abrir_tela_atividades(o, a, apt), 
                     on_long_press=lambda e, apt=numero_apto: confirmar_exclusao_apto(apt)
                 )
-                grid_aptos.grid_aptos = grid_aptos.controls.append(bloco)
+                grid_aptos.controls.append(bloco)
             page.update()
 
         campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50)
@@ -772,7 +767,7 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_nova_obra, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_obra)])
 
         desenhar_lista_obras()
-        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, inline_add=linha_add)
+        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add)
 
     abrir_tela_obras()
 
