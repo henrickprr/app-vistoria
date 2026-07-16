@@ -166,12 +166,10 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # Container dinâmico que vai segurar os botões na tela
         bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
         def acionar_pdf(e):
             try:
-                # 1. Avisa na tela que o processo começou
                 botao_exportar.content.controls[1].value = "Gerando Ficheiro..."
                 page.update()
                 
@@ -181,21 +179,18 @@ def main(page: ft.Page):
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
-                # 2. Fabrica o PDF no servidor Render
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
                 url_segura = f"/{urllib.parse.quote(nome_pdf)}"
                 
-                # Restaura o botão vermelho original
                 botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
                 
-                # 3. MÁGICA DO CELULAR: Cria o botão nativo já injetado com o link direto
                 bloco_botoes_acao.controls.clear()
                 bloco_botoes_acao.controls.append(botao_exportar)
                 bloco_botoes_acao.controls.append(
                     ft.FilledButton(
                         text="📥 CLIQUE AQUI PARA DESCARREGAR PDF",
                         icon=ft.Icons.DOWNLOAD,
-                        url=url_segura, # Link direto puro (Bypassa o bloqueador do Chrome/Safari)
+                        url=url_segura,
                         width=380,
                         height=48
                     )
@@ -484,7 +479,8 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
 
         desenhar_lista_andares()
-        page.add(cabecalho, botao_relatorio, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, line_add=linha_add)
+        # ERRO CORRIGIDO AQUI NA LINHA DE BAIXO (apenas linha_add)
+        page.add(cabecalho, botao_relatorio, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
 
 
     # ==========================================
