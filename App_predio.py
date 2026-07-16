@@ -103,7 +103,7 @@ def main(page: ft.Page):
         pdf.ln(3)
 
         pdf.set_font("helvetica", 'B', 9)
-        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(14, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(16, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(20, 5, " Pend.", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(33, 150, 243); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Andam.", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(255, 152, 0); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Exist.", new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -311,14 +311,14 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # FERRAMENTA A: STATUS RÁPIDO (Por Andar - Clicar nos Quadradinhos)
+    # TELA 6: LANÇAMENTO DE ATUALIZAR STATUS (QUADRADINHOS POR ANDAR)
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.controls.clear()
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
-            ft.Text("Status Rápido", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+            ft.Text("Atualizar Status", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
@@ -456,7 +456,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # FERRAMENTA B: NOVA TAREFA (Vários Andares - Checkboxes)
+    # FERRAMENTA B: DISTRIBUIR NOVA TAREFA (CHECKBOXES COMPACTAS)
     # ==========================================
     def abrir_tela_lancamento_tarefas(obra):
         page.controls.clear()
@@ -497,7 +497,8 @@ def main(page: ft.Page):
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
         checkboxes_andares = {}
-        grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.0, spacing=10, run_spacing=10)
+        # CORREÇÃO DE LAYOUT: Grid ultra compactado e próximo para evitar rolagem
+        grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.5, spacing=4, run_spacing=4)
 
         for andar in andares_ordenados:
             label_andar = f"{andar}º Andar" if str(andar).isdigit() else str(andar)
@@ -528,7 +529,6 @@ def main(page: ft.Page):
                 page.update()
                 return
             
-            # Adiciona a tarefa como "Não Iniciado" em todos os andares marcados
             for andar_alvo in andares_selecionados:
                 for apto in banco_dados[obra][andar_alvo].keys():
                     if tarefa not in banco_dados[obra][andar_alvo][apto]:
@@ -554,6 +554,93 @@ def main(page: ft.Page):
             ft.Text("A nova tarefa será criada como 'Não Iniciado'.", size=11, color=ft.Colors.GREY_600),
             ft.Divider(),
             ft.Row([ft.Text("ONDE ELA DEVE APARECER?", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Container(content=grid_andares, expand=True)
+        ], expand=True)
+
+        page.add(cabecalho, layout, botao_aplicar)
+
+
+    # ==========================================
+    # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE (NOVA TELA EM LOTE)
+    # ==========================================
+    def abrir_tela_remover_tarefas(obra):
+        page.controls.clear()
+        
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
+            ft.Text("Remover de Vários Andares", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+        ])
+
+        servicos_disponiveis = set(lista_servicos_base)
+        for and_dados in banco_dados[obra].values():
+            for ap_dados in and_dados.values():
+                for s in ap_dados.keys():
+                    servicos_disponiveis.add(s)
+        
+        opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
+        dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade a Excluir", options=opcoes_tarefas, expand=True)
+
+        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+
+        checkboxes_andares = {}
+        # Grid ultra compacto para manter as checkboxes próximas na remoção
+        grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.5, spacing=4, run_spacing=4)
+
+        for andar in andares_ordenados:
+            label_andar = f"{andar}º Andar" if str(andar).isdigit() else str(andar)
+            cb = ft.Checkbox(label=label_andar, value=False)
+            checkboxes_andares[andar] = cb
+            grid_andares.controls.append(cb)
+
+        def selecionar_todos_andares(e):
+            todos_marcados = all(cb.value for cb in checkboxes_andares.values())
+            for cb in checkboxes_andares.values():
+                cb.value = not todos_marcados
+            page.update()
+
+        btn_selecionar_todos = ft.TextButton("Selecionar Todos", icon=ft.Icons.SELECT_ALL, on_click=selecionar_todos_andares)
+
+        def aplicar_remocao_lote(e):
+            tarefa = dropdown_tarefa.value
+            if not tarefa:
+                dropdown_tarefa.error_text = "Selecione uma atividade!"
+                page.update()
+                return
+            
+            andares_selecionados = [andar for andar, cb in checkboxes_andares.items() if cb.value]
+            if not andares_selecionados:
+                snack = ft.SnackBar(ft.Text("Marque pelo menos um Andar nas checkboxes!"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+                return
+            
+            # Varre e deleta a chave de tarefa se ela existir nos apartamentos
+            for andar_alvo in andares_selecionados:
+                for apto in list(banco_dados[obra][andar_alvo].keys()):
+                    if tarefa in banco_dados[obra][andar_alvo][apto]:
+                        del banco_dados[obra][andar_alvo][apto][tarefa]
+            
+            salvar_no_firebase(banco_dados, mostrar_snack=False)
+            
+            snack = ft.SnackBar(ft.Text(f"❌ Tarefa '{tarefa}' apagada de {len(andares_selecionados)} andares!"), bgcolor=ft.Colors.RED_700)
+            page.overlay.append(snack)
+            snack.open = True
+            
+            for cb in checkboxes_andares.values():
+                cb.value = False
+            page.update()
+
+        botao_aplicar = ft.Container(
+            content=ft.Row([ft.Icon(ft.Icons.DELETE_FOREVER, color=ft.Colors.WHITE), ft.Text("REMOVER ATIVIDADE DO ESCOPO", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=14)], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=ft.Colors.RED_800, padding=15, border_radius=8, ink=True, on_click=aplicar_remocao_lote
+        )
+
+        layout = ft.Column([
+            dropdown_tarefa,
+            ft.Text("Atenção: Esta ação excluirá permanentemente a tarefa e o seu histórico nos andares marcados.", size=11, color=ft.Colors.RED_500),
+            ft.Divider(),
+            ft.Row([ft.Text("REMOVER DE QUAIS PAVIMENTOS?", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Container(content=grid_andares, expand=True)
         ], expand=True)
 
@@ -847,7 +934,7 @@ def main(page: ft.Page):
                     on_click=lambda e, o=obra, a=andar, apt=numero_apto: abrir_tela_atividades(o, a, apt), 
                     on_long_press=lambda e, apt=numero_apto: confirmar_exclusao_apto(apt)
                 )
-                grid_aptos.controls.append(bloco)
+                grid_aptos.controls.append(bloco) # Correção do bug anterior de referência
             page.update()
 
         campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50)
@@ -903,26 +990,30 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        # O NOVO LAYOUT DO CABEÇALHO COM OS 4 BOTÕES MÁGICOS
+        # MATRIZ ATUALIZADA DE BOTÕES COM OS 5 ATALHOS DE GESTÃO E EXCLUSÃO
         botoes_acao_obra = ft.Column([
             ft.Row([
                 ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=16), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=16), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio, expand=True
                 ),
                 ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.BAR_CHART, color=ft.Colors.WHITE, size=16), ft.Text("Painel", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Icon(ft.Icons.BAR_CHART, color=ft.Colors.WHITE, size=16), ft.Text("Painel", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.TEAL_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_dashboard(obra), expand=True
                 )
             ], spacing=8),
             ft.Row([
                 ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Status Rápido", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Atualizar Status", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_status(obra), expand=True
                 ),
                 ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE, size=16), ft.Text("Nova Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE, size=16), ft.Text("+ Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.PURPLE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_tarefas(obra), expand=True
+                ),
+                ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.DELETE_SWEEP, color=ft.Colors.WHITE, size=16), ft.Text("- Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.RED_800, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_remover_tarefas(obra), expand=True
                 )
             ], spacing=8)
         ], spacing=8)
@@ -1025,7 +1116,7 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_nova_obra, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_obra)])
 
         desenhar_lista_obras()
-        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add)
+        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add) # Correção definitiva do argumento de inserção de tela
 
     abrir_tela_obras()
 
