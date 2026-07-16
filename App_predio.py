@@ -82,6 +82,7 @@ def main(page: ft.Page):
         if status == "Finalizado": return ft.Colors.GREEN_500
         if status == "Não Conforme": return ft.Colors.RED_500
         if status == "Em Andamento": return ft.Colors.BLUE_500
+        if status == "Existente": return ft.Colors.ORANGE_500
         return ft.Colors.GREY_400
 
 
@@ -99,11 +100,13 @@ def main(page: ft.Page):
         pdf.cell(0, 6, f"Atividade: {servico_escolhido}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         pdf.ln(3)
 
+        # Legenda do PDF Atualizada com o status Existente
         pdf.set_font("helvetica", 'B', 9)
-        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(16, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
-        pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Pendente", new_x=XPos.RIGHT, new_y=YPos.TOP)
-        pdf.set_fill_color(33, 150, 243); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(24, 5, " Em Andam.", new_x=XPos.RIGHT, new_y=YPos.TOP)
-        pdf.set_fill_color(189, 189, 189); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(30, 5, " Não Iniciado", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(14, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(20, 5, " Pend.", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(33, 150, 243); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Andam.", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(255, 152, 0); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Exist.", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(189, 189, 189); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(28, 5, " Não Iniciado", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(4)
 
         largura_andar = 20
@@ -142,6 +145,7 @@ def main(page: ft.Page):
                 if status == "Finalizado": pdf.set_fill_color(76, 175, 80)
                 elif status == "Não Conforme": pdf.set_fill_color(244, 67, 54)
                 elif status == "Em Andamento": pdf.set_fill_color(33, 150, 243)
+                elif status == "Existente": pdf.set_fill_color(255, 152, 0)
                 else: pdf.set_fill_color(189, 189, 189)
 
                 larg = largura_corr if local == "Corredor" else largura_apto
@@ -155,7 +159,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO MÚLTIPLO (SISTEMA DIRETO)
+    # TELA 6: LANÇAMENTO MÚLTIPLO
     # ==========================================
     def abrir_tela_lancamento_lote(obra):
         page.controls.clear()
@@ -208,6 +212,7 @@ def main(page: ft.Page):
                 ft.dropdown.Option("Finalizado"),
                 ft.dropdown.Option("Em Andamento"),
                 ft.dropdown.Option("Não Conforme"),
+                ft.dropdown.Option("Existente"),
                 ft.dropdown.Option("Não Iniciado"),
             ],
             value="Finalizado",
@@ -430,10 +435,12 @@ def main(page: ft.Page):
 
         bloco_botoes_acao.controls.append(botao_exportar)
 
+        # Legenda da tela do App com o status Existente em Laranja
         legenda = ft.Row([
             ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
             ft.Container(width=15, height=15, bgcolor=ft.Colors.RED_500, border_radius=3), ft.Text("Pend.", size=12),
             ft.Container(width=15, height=15, bgcolor=ft.Colors.BLUE_500, border_radius=3), ft.Text("Andam.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.ORANGE_500, border_radius=3), ft.Text("Existente", size=12),
             ft.Container(width=15, height=15, bgcolor=ft.Colors.GREY_400, border_radius=3), ft.Text("Não Iniciado", size=12),
         ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
 
@@ -526,7 +533,17 @@ def main(page: ft.Page):
 
         def abrir_popup_status(nome_servico):
             dados_atuais = banco_dados[obra][andar][apto][nome_servico]
-            menu_dropdown = ft.Dropdown(options=[ft.dropdown.Option("Não Iniciado"), ft.dropdown.Option("Em Andamento"), ft.dropdown.Option("Finalizado"), ft.dropdown.Option("Não Conforme")], value=dados_atuais["status"], width=250)
+            menu_dropdown = ft.Dropdown(
+                options=[
+                    ft.dropdown.Option("Não Iniciado"), 
+                    ft.dropdown.Option("Em Andamento"), 
+                    ft.dropdown.Option("Finalizado"), 
+                    ft.dropdown.Option("Não Conforme"),
+                    ft.dropdown.Option("Existente")
+                ], 
+                value=dados_atuais["status"], 
+                width=250
+            )
             campo_obs = ft.TextField(label="Observação", value=dados_atuais["obs"], multiline=True, visible=(dados_atuais["status"] == "Não Conforme"))
             
             def ao_mudar_dropdown(e):
@@ -593,9 +610,15 @@ def main(page: ft.Page):
                 cor_fundo = ft.Colors.GREY_400 
                 if atividades: 
                     status_das_atividades = [dados["status"] for dados in atividades.values()]
-                    if "Não Conforme" in status_das_atividades: cor_fundo = ft.Colors.RED_500 
-                    elif all(status == "Finalizado" for status in status_das_atividades): cor_fundo = ft.Colors.GREEN_500 
-                    elif any(status != "Não Iniciado" for status in status_das_atividades): cor_fundo = ft.Colors.BLUE_500 
+                    if "Não Conforme" in status_das_atividades: 
+                        cor_fundo = ft.Colors.RED_500 
+                    elif all(status == "Finalizado" or status == "Existente" for status in status_das_atividades): 
+                        if all(status == "Existente" for status in status_das_atividades):
+                            cor_fundo = ft.Colors.ORANGE_500
+                        else:
+                            cor_fundo = ft.Colors.GREEN_500 
+                    elif any(status != "Não Iniciado" for status in status_das_atividades): 
+                        cor_fundo = ft.Colors.BLUE_500 
                 
                 tamanho_fonte = 18 if numero_apto == "Corredor" else 26
                 
