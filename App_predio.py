@@ -166,12 +166,10 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # Container dinâmico que segura os botões
         bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
         def acionar_pdf(e):
             try:
-                # Altera o texto para avisar que está gerando
                 botao_exportar.content.controls[1].value = "A Gerar Ficheiro..."
                 page.update()
                 
@@ -181,17 +179,11 @@ def main(page: ft.Page):
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
-                # Gera fisicamente o PDF no Render
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
-                
-                # Monta a URL segura
                 url_segura = f"/{urllib.parse.quote(nome_pdf)}"
                 
-                # Devolve o botão vermelho ao estado original
                 botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
                 
-                # A URL declarativa é tratada diretamente pelo toque no cliente
-                # Flet. Isso evita o bloqueio de pop-up dos navegadores mobile.
                 botao_download = ft.Container(
                     content=ft.Row([
                         ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
@@ -201,13 +193,10 @@ def main(page: ft.Page):
                     padding=15,
                     border_radius=8,
                     ink=True,
-                    url=ft.Url(
-                        url=url_segura,
-                        target=ft.UrlTarget.SELF,
-                    ),
+                    url=url_segura,       
+                    url_target="_self"    
                 )
                 
-                # Atualiza a interface injetando o novo botão abaixo do primeiro
                 bloco_botoes_acao.controls.clear()
                 bloco_botoes_acao.controls.append(botao_exportar)
                 bloco_botoes_acao.controls.append(botao_download)
@@ -425,6 +414,67 @@ def main(page: ft.Page):
             ft.Text(f"{obra}", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
         ])
         
+        # === NOVA FUNÇÃO: ADICIONAR TAREFA EM LOTE ===
+        def abrir_popup_tarefa_lote(e):
+            campo_tarefa = ft.TextField(label="Nome da Nova Tarefa (ex: Rejunte Piso)", width=300)
+            
+            opcoes_andares = [ft.dropdown.Option(text="Todos os Andares", key="Todos")]
+            andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+            for a in andares_ordenados:
+                opcoes_andares.append(ft.dropdown.Option(text=f"Somente {a}º Pavimento", key=a))
+                
+            dropdown_andar = ft.Dropdown(options=opcoes_andares, value="Todos", width=300)
+
+            def aplicar_tarefa_lote(e):
+                tarefa = campo_tarefa.value.strip().replace(".", "")
+                if not tarefa:
+                    campo_tarefa.error_text = "Digite um nome válido"
+                    page.update()
+                    return
+                
+                # Define em quais andares a tarefa será injetada
+                if dropdown_andar.value == "Todos":
+                    andares_alvo = list(banco_dados[obra].keys())
+                else:
+                    andares_alvo = [dropdown_andar.value]
+
+                modificou = False
+                for andar_alvo in andares_alvo:
+                    for apto in banco_dados[obra][andar_alvo].keys():
+                        if tarefa not in banco_dados[obra][andar_alvo][apto]:
+                            banco_dados[obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
+                            modificou = True
+                
+                if modificou:
+                    salvar_no_firebase(banco_dados)
+                
+                dlg_lote.open = False
+                snack = ft.SnackBar(ft.Text(f"Tarefa '{tarefa}' adicionada em lote!", color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_700)
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+
+            dlg_lote = ft.AlertDialog(
+                title=ft.Text("Tarefa em Lote", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800),
+                content=ft.Column([
+                    ft.Text("Adicione uma atividade a vários apartamentos de uma vez:"),
+                    campo_tarefa,
+                    dropdown_andar
+                ], tight=True),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda e: fechar_dlg_lote(dlg_lote)),
+                    ft.ElevatedButton("Aplicar", on_click=aplicar_tarefa_lote, bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE)
+                ]
+            )
+            def fechar_dlg_lote(dlg):
+                dlg.open = False
+                page.update()
+
+            page.overlay.append(dlg_lote)
+            dlg_lote.open = True
+            page.update()
+        
+        # Função antiga de relatório mantida
         def iniciar_relatorio(e):
             servicos_disponiveis = set(lista_servicos_base)
             for andar_dados in banco_dados[obra].values():
@@ -433,7 +483,6 @@ def main(page: ft.Page):
                         servicos_disponiveis.add(serv)
             
             opcoes = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
-            
             menu_relatorio = ft.Dropdown(options=opcoes, label="Escolha a Atividade", width=250)
             
             def gerar(e):
@@ -453,10 +502,17 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        botao_relatorio = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE), ft.Text("Gerar Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
-            bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio
-        )
+        # === BOTÕES LADO A LADO NA TELA DE ANDARES ===
+        botoes_acao_obra = ft.Row([
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio, expand=True
+            ),
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE), ft.Text("Tarefa em Lote", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=abrir_popup_tarefa_lote, expand=True
+            )
+        ], spacing=10)
 
         lista_andares = ft.ListView(expand=True, spacing=10)
 
@@ -495,7 +551,7 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
 
         desenhar_lista_andares()
-        page.add(cabecalho, botao_relatorio, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
+        page.add(cabecalho, botoes_acao_obra, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
 
 
     # ==========================================
