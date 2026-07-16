@@ -41,16 +41,18 @@ def main(page: ft.Page):
         except Exception as e:
             return None
 
-    def salvar_no_firebase(dados):
+    # Corrigido: Agora podemos escolher se a notificação aparece ou não para evitar travamentos na tela de Lote
+    def salvar_no_firebase(dados, mostrar_snack=True):
         try:
             req = urllib.request.Request(FIREBASE_URL, data=json.dumps(dados).encode('utf-8'), method='PUT')
             req.add_header('Content-Type', 'application/json')
             urllib.request.urlopen(req)
             
-            snack = ft.SnackBar(ft.Text("☁️ Sincronizado com o Firebase!", color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_700)
-            page.overlay.append(snack)
-            snack.open = True
-            page.update()
+            if mostrar_snack:
+                snack = ft.SnackBar(ft.Text("☁️ Sincronizado com o Firebase!", color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_700)
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
         except Exception as e:
             pass
 
@@ -154,7 +156,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO MÚLTIPLO (NOVA)
+    # TELA 6: LANÇAMENTO MÚLTIPLO 
     # ==========================================
     def abrir_tela_lancamento_lote(obra):
         page.controls.clear()
@@ -164,7 +166,6 @@ def main(page: ft.Page):
             ft.Text("Lançamento Múltiplo", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
         ])
 
-        # Puxa todas as atividades para listar no dropdown
         servicos_disponiveis = set(lista_servicos_base)
         for and_dados in banco_dados[obra].values():
             for ap_dados in and_dados.values():
@@ -172,9 +173,15 @@ def main(page: ft.Page):
                     servicos_disponiveis.add(s)
         
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
-        dropdown_tarefa = ft.Dropdown(label="Qual Atividade?", options=opcoes_tarefas, expand=True)
+        
+        # A Mágica: Agora quando você muda a tarefa, a tela desenha as cores novamente!
+        dropdown_tarefa = ft.Dropdown(
+            label="Qual Atividade?", 
+            options=opcoes_tarefas, 
+            expand=True,
+            on_change=lambda _: desenhar_grid()
+        )
 
-        # Botão "+" para caso o usuário queira digitar uma atividade inédita
         def popup_nova_tarefa(e):
             campo_nova = ft.TextField(label="Nome da Nova Atividade")
             def add_nova(e):
@@ -183,7 +190,7 @@ def main(page: ft.Page):
                     dropdown_tarefa.options.append(ft.dropdown.Option(val))
                     dropdown_tarefa.value = val
                     dlg_nova.open = False
-                    page.update()
+                    desenhar_grid() 
             dlg_nova = ft.AlertDialog(
                 title=ft.Text("Nova Atividade"),
                 content=campo_nova,
@@ -214,23 +221,28 @@ def main(page: ft.Page):
         opcoes_andares = [ft.dropdown.Option(key=a, text=f"{a}º Pavimento") for a in andares_ordenados]
         dropdown_andar = ft.Dropdown(label="Filtrar por Andar", options=opcoes_andares, value=andar_atual, expand=True)
 
-        # Memória dos apartamentos que o usuário foi clicando
         aptos_selecionados = set()
-
         grid_aptos = ft.GridView(expand=True, runs_count=4, child_aspect_ratio=1.0, spacing=10, run_spacing=10)
 
-        # Atualiza a tela de quadradinhos do andar selecionado
+        # Corrigido: Agora os quadradinhos mostram a cor do status da tarefa selecionada!
         def desenhar_grid():
             grid_aptos.controls.clear()
             if not andar_atual: return
             
+            tarefa_atual = dropdown_tarefa.value
             aptos_do_andar = sorted(banco_dados[obra][andar_atual].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
             
             for apto in aptos_do_andar:
                 is_selected = (andar_atual, apto) in aptos_selecionados
-                cor_fundo = ft.Colors.BLUE_100 if is_selected else ft.Colors.GREY_200
-                icone = ft.Icons.CHECK_CIRCLE if is_selected else ft.Icons.CIRCLE_OUTLINED
-                cor_icone = ft.Colors.BLUE_700 if is_selected else ft.Colors.GREY_500
+                
+                # Procura a cor real daquele apartamento no banco de dados
+                cor_fundo = ft.Colors.GREY_300
+                if tarefa_atual and tarefa_atual in banco_dados[obra][andar_atual][apto]:
+                    st = banco_dados[obra][andar_atual][apto][tarefa_atual]["status"]
+                    cor_fundo = get_cor_status(st)
+                
+                borda = ft.border.all(4, ft.Colors.BLACK) if is_selected else None
+                icone = ft.Icons.CHECK_CIRCLE if is_selected else None
                 
                 def toggle_selecao(e, a=andar_atual, ap=apto):
                     if (a, ap) in aptos_selecionados:
@@ -241,22 +253,23 @@ def main(page: ft.Page):
                 
                 bloco = ft.Container(
                     content=ft.Column([
-                        ft.Icon(icone, color=cor_icone, size=28),
-                        ft.Text(apto, size=13, weight=ft.FontWeight.BOLD, color=ft.Colors.BLACK87)
+                        ft.Icon(icone, color=ft.Colors.WHITE, size=24) if icone else ft.Container(height=24),
+                        ft.Text(apto, size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
                     ], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor=cor_fundo, border_radius=8, ink=True, on_click=toggle_selecao
+                    bgcolor=cor_fundo, border_radius=8, border=borda, ink=True, on_click=toggle_selecao
                 )
                 grid_aptos.controls.append(bloco)
             page.update()
 
+        # Limpa as seleções antigas ao trocar de andar para evitar aplicar onde você não está vendo
         def mudar_andar(e):
             nonlocal andar_atual
             andar_atual = dropdown_andar.value
+            aptos_selecionados.clear()
             desenhar_grid()
             
         dropdown_andar.on_change = mudar_andar
 
-        # Botão mágico para marcar ou desmarcar o andar todo
         def selecionar_todos_do_andar(e):
             if not andar_atual: return
             aptos_do_andar = list(banco_dados[obra][andar_atual].keys())
@@ -288,7 +301,6 @@ def main(page: ft.Page):
             
             status_escolhido = dropdown_status.value
             
-            # Aplica no banco de dados
             for (and_sel, apt_sel) in aptos_selecionados:
                 if and_sel in banco_dados[obra] and apt_sel in banco_dados[obra][and_sel]:
                     if tarefa not in banco_dados[obra][and_sel][apt_sel]:
@@ -296,9 +308,10 @@ def main(page: ft.Page):
                     else:
                         banco_dados[obra][and_sel][apt_sel][tarefa]["status"] = status_escolhido
             
-            salvar_no_firebase(banco_dados)
+            # MÁGICA DE ESTABILIDADE AQUI: Salva no banco, mas não joga notificação repetida!
+            salvar_no_firebase(banco_dados, mostrar_snack=False)
             
-            snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' injetado em {len(aptos_selecionados)} locais!"), bgcolor=ft.Colors.GREEN_700)
+            snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso!"), bgcolor=ft.Colors.GREEN_700)
             page.overlay.append(snack)
             snack.open = True
             
@@ -612,7 +625,6 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        # === BOTÕES LADO A LADO NA TELA DE ANDARES ===
         botoes_acao_obra = ft.Row([
             ft.Container(
                 content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
