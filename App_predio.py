@@ -166,48 +166,44 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # === CORREÇÃO FINAL DO LINK DE DOWNLOAD ===
+        # Container dinâmico que vai segurar os botões na tela
+        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
         def acionar_pdf(e):
             try:
+                # 1. Avisa na tela que o processo começou
+                botao_exportar.content.controls[1].value = "Gerando Ficheiro..."
+                page.update()
+                
                 if not os.path.exists("assets"):
                     os.makedirs("assets")
                     
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
+                # 2. Fabrica o PDF no servidor Render
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
                 url_segura = f"/{urllib.parse.quote(nome_pdf)}"
                 
-                def fechar_e_baixar(e):
-                    dlg_download.open = False
-                    page.update()
-                    # Comando limpo e direto. O celular permite na hora!
-                    page.launch_url(url_segura)
-
-                botao_baixar_seguro = ft.Container(
-                    content=ft.Row([
-                        ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
-                        ft.Text("CONFIRMAR DOWNLOAD", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
-                    ], alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.GREEN_700,
-                    padding=15,
-                    border_radius=8,
-                    ink=True,
-                    on_click=fechar_e_baixar
+                # Restaura o botão vermelho original
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                
+                # 3. MÁGICA DO CELULAR: Cria o botão nativo já injetado com o link direto
+                bloco_botoes_acao.controls.clear()
+                bloco_botoes_acao.controls.append(botao_exportar)
+                bloco_botoes_acao.controls.append(
+                    ft.FilledButton(
+                        text="📥 CLIQUE AQUI PARA DESCARREGAR PDF",
+                        icon=ft.Icons.DOWNLOAD,
+                        url=url_segura, # Link direto puro (Bypassa o bloqueador do Chrome/Safari)
+                        width=380,
+                        height=48
+                    )
                 )
-
-                dlg_download = ft.AlertDialog(
-                    title=ft.Text("✅ Arquivo Gerado!", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
-                    content=ft.Text("O seu PDF está pronto. Clique no botão abaixo para baixar o arquivo no seu dispositivo."),
-                    actions=[botao_baixar_seguro],
-                    actions_alignment=ft.MainAxisAlignment.CENTER
-                )
-
-                page.overlay.append(dlg_download)
-                dlg_download.open = True
                 page.update()
                 
             except Exception as ex:
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
                 snack_erro = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
                 page.overlay.append(snack_erro)
                 snack_erro.open = True
@@ -217,6 +213,8 @@ def main(page: ft.Page):
             content=ft.Row([ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), ft.Text("Gerar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
             bgcolor=ft.Colors.RED_700, padding=12, border_radius=8, ink=True, on_click=acionar_pdf
         )
+
+        bloco_botoes_acao.controls.append(botao_exportar)
 
         legenda = ft.Row([
             ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
@@ -265,7 +263,7 @@ def main(page: ft.Page):
 
         area_rolagem = ft.Row([ft.Column([tabela], scroll=ft.ScrollMode.AUTO)], scroll=ft.ScrollMode.AUTO, expand=True)
 
-        page.add(cabecalho, botao_exportar, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
+        page.add(cabecalho, bloco_botoes_acao, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
         page.update()
 
 
@@ -486,7 +484,7 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
 
         desenhar_lista_andares()
-        page.add(cabecalho, botao_relatorio, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
+        page.add(cabecalho, botao_relatorio, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, line_add=linha_add)
 
 
     # ==========================================
