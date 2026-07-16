@@ -57,9 +57,9 @@ def main(page: ft.Page):
         except Exception as e:
             pass
 
+    # BLINDAGEM DE ARRANQUE: Garante que os dados são um dicionário e suprime pop-ups fantasmas
     banco_dados = carregar_do_firebase()
-
-    if banco_dados is None:
+    if not isinstance(banco_dados, dict):
         banco_dados = {"Golden Flat": {}, "Residência Alvorada": {}}
 
     if "Golden Flat" in banco_dados:
@@ -78,7 +78,10 @@ def main(page: ft.Page):
                         s: {"status": "Não Iniciado", "obs": ""} for s in lista_servicos_base
                     }
                     precisa_salvar = True
-        if precisa_salvar: salvar_no_firebase(banco_dados)
+        
+        # SUPRIMIDO o snackbar no arranque para evitar Crash (Erro 500) do Servidor Web
+        if precisa_salvar: 
+            salvar_no_firebase(banco_dados, mostrar_snack=False)
 
     def get_cor_status(status):
         if status == "Finalizado": return ft.Colors.GREEN_500
@@ -103,7 +106,7 @@ def main(page: ft.Page):
         pdf.ln(3)
 
         pdf.set_font("helvetica", 'B', 9)
-        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(16, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(14, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(20, 5, " Pend.", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(33, 150, 243); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Andam.", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(255, 152, 0); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Exist.", new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -311,7 +314,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO DE STATUS RÁPIDO (QUADRADINHOS POR ANDAR)
+    # TELA 6: LANÇAMENTO DE STATUS RÁPIDO 
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.controls.clear()
@@ -329,8 +332,7 @@ def main(page: ft.Page):
         
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
         dropdown_tarefa = ft.Dropdown(label="Qual Atividade?", options=opcoes_tarefas, expand=True)
-        dropdown_tarefa.on_change = lambda _: desenhar_grid()
-
+        
         dropdown_status = ft.Dropdown(
             label="Status a Aplicar",
             options=[
@@ -347,8 +349,8 @@ def main(page: ft.Page):
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
         andar_inicial = andares_ordenados[0] if andares_ordenados else None
         
-        opcoes_andares = [ft.dropdown.Option(key=a, text=f"{a}º Pavimento") for a in andares_ordenados]
-        dropdown_andar = ft.Dropdown(label="Qual Andar?", options=opcoes_andares, value=andar_inicial, expand=True)
+        opcoes_andares = [ft.dropdown.Option(key=str(a), text=f"{a}º Pavimento") for a in andares_ordenados]
+        dropdown_andar = ft.Dropdown(label="Qual Andar?", options=opcoes_andares, value=str(andar_inicial), expand=True)
 
         aptos_selecionados = set() 
         grid_aptos = ft.GridView(expand=True, runs_count=4, child_aspect_ratio=1.0, spacing=10, run_spacing=10)
@@ -399,6 +401,8 @@ def main(page: ft.Page):
                 grid_aptos.controls.append(bloco)
             page.update()
 
+        dropdown_tarefa.on_change = lambda _: desenhar_grid()
+
         def mudar_andar(e):
             aptos_selecionados.clear() 
             desenhar_grid()
@@ -442,8 +446,6 @@ def main(page: ft.Page):
             bgcolor=ft.Colors.ORANGE_700, padding=15, border_radius=8, ink=True, on_click=aplicar_status_lote
         )
 
-        desenhar_grid()
-        
         layout = ft.Column([
             ft.Row([dropdown_tarefa, dropdown_status]),
             dropdown_andar,
@@ -452,11 +454,13 @@ def main(page: ft.Page):
             ft.Container(content=grid_aptos, expand=True)
         ], expand=True)
 
+        # Adiciona primeiro, desenha a grelha depois (Segurança de renderização)
         page.add(cabecalho, layout, botao_aplicar)
+        desenhar_grid()
 
 
     # ==========================================
-    # FERRAMENTA B: DISTRIBUIR NOVA TAREFA (CHECKBOXES COMPACTAS)
+    # FERRAMENTA B: DISTRIBUIR NOVA TAREFA (CHECKBOXES)
     # ==========================================
     def abrir_tela_lancamento_tarefas(obra):
         page.controls.clear()
@@ -497,7 +501,6 @@ def main(page: ft.Page):
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
         checkboxes_andares = {}
-        # CORREÇÃO DE LAYOUT: Grid ultra compactado e próximo para evitar rolagem
         grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.5, spacing=4, run_spacing=4)
 
         for andar in andares_ordenados:
@@ -561,7 +564,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE (NOVA TELA EM LOTE)
+    # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE 
     # ==========================================
     def abrir_tela_remover_tarefas(obra):
         page.controls.clear()
@@ -583,7 +586,6 @@ def main(page: ft.Page):
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
         checkboxes_andares = {}
-        # Grid ultra compacto para manter as checkboxes próximas na remoção
         grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.5, spacing=4, run_spacing=4)
 
         for andar in andares_ordenados:
@@ -615,7 +617,6 @@ def main(page: ft.Page):
                 page.update()
                 return
             
-            # Varre e deleta a chave de tarefa se ela existir nos apartamentos
             for andar_alvo in andares_selecionados:
                 for apto in list(banco_dados[obra][andar_alvo].keys()):
                     if tarefa in banco_dados[obra][andar_alvo][apto]:
@@ -782,7 +783,6 @@ def main(page: ft.Page):
         area_rolagem = ft.Row([ft.Column([tabela], scroll=ft.ScrollMode.AUTO)], scroll=ft.ScrollMode.AUTO, expand=True)
 
         page.add(cabecalho, bloco_botoes_acao, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
-        page.update()
 
 
     # ==========================================
@@ -871,8 +871,8 @@ def main(page: ft.Page):
                 desenhar_botoes_atividades()
         linha_add = ft.Row([campo_nova, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_atividade)])
         
-        desenhar_botoes_atividades()
         page.add(cabecalho, area_rolagem, ft.Divider(), linha_add)
+        desenhar_botoes_atividades()
 
 
     # ==========================================
@@ -934,7 +934,7 @@ def main(page: ft.Page):
                     on_click=lambda e, o=obra, a=andar, apt=numero_apto: abrir_tela_atividades(o, a, apt), 
                     on_long_press=lambda e, apt=numero_apto: confirmar_exclusao_apto(apt)
                 )
-                grid_aptos.controls.append(bloco) # Correção do bug anterior de referência
+                grid_aptos.controls.append(bloco)
             page.update()
 
         campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50)
@@ -947,8 +947,8 @@ def main(page: ft.Page):
                 desenhar_grid()
         linha_add = ft.Row([campo_novo_apto, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_apto)])
         
-        desenhar_grid()
         page.add(cabecalho, grid_aptos, ft.Divider(), linha_add)
+        desenhar_grid()
 
 
     # ==========================================
@@ -990,7 +990,6 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        # MATRIZ ATUALIZADA DE BOTÕES COM OS 5 ATALHOS DE GESTÃO E EXCLUSÃO
         botoes_acao_obra = ft.Column([
             ft.Row([
                 ft.Container(
@@ -1062,8 +1061,8 @@ def main(page: ft.Page):
                 desenhar_lista_andares()
         linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
 
-        desenhar_lista_andares()
         page.add(cabecalho, botoes_acao_obra, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
+        desenhar_lista_andares()
 
 
     # ==========================================
@@ -1115,8 +1114,8 @@ def main(page: ft.Page):
                 desenhar_lista_obras()
         linha_add = ft.Row([campo_nova_obra, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_obra)])
 
+        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add)
         desenhar_lista_obras()
-        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add) # Correção definitiva do argumento de inserção de tela
 
     abrir_tela_obras()
 
