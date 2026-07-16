@@ -57,7 +57,6 @@ def main(page: ft.Page):
         except Exception as e:
             pass
 
-    # BLINDAGEM DE ARRANQUE: Garante que os dados são um dicionário e suprime pop-ups fantasmas
     banco_dados = carregar_do_firebase()
     if not isinstance(banco_dados, dict):
         banco_dados = {"Golden Flat": {}, "Residência Alvorada": {}}
@@ -79,7 +78,6 @@ def main(page: ft.Page):
                     }
                     precisa_salvar = True
         
-        # SUPRIMIDO o snackbar no arranque para evitar Crash (Erro 500) do Servidor Web
         if precisa_salvar: 
             salvar_no_firebase(banco_dados, mostrar_snack=False)
 
@@ -454,7 +452,6 @@ def main(page: ft.Page):
             ft.Container(content=grid_aptos, expand=True)
         ], expand=True)
 
-        # Adiciona primeiro, desenha a grelha depois (Segurança de renderização)
         page.add(cabecalho, layout, botao_aplicar)
         desenhar_grid()
 
@@ -564,7 +561,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE 
+    # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE
     # ==========================================
     def abrir_tela_remover_tarefas(obra):
         page.controls.clear()
@@ -1124,4 +1121,4 @@ os.makedirs("assets", exist_ok=True)
 porta = int(os.environ.get("PORT", 8000))
 
 if __name__ == "__main__":
-    ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", assets_dir="assets")
+    ft.run(target=main, port=porta, host="0.0.0.0", assets_dir="assets")
