@@ -155,7 +155,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO MÚLTIPLO 
+    # TELA 6: LANÇAMENTO MÚLTIPLO (SISTEMA DIRETO)
     # ==========================================
     def abrir_tela_lancamento_lote(obra):
         page.controls.clear()
@@ -179,10 +179,7 @@ def main(page: ft.Page):
             expand=True
         )
         
-        def mudar_tarefa(e):
-            desenhar_grid()
-            
-        dropdown_tarefa.on_change = mudar_tarefa
+        dropdown_tarefa.on_change = lambda _: desenhar_grid()
 
         def popup_nova_tarefa(e):
             campo_nova = ft.TextField(label="Nome da Nova Atividade")
@@ -218,41 +215,42 @@ def main(page: ft.Page):
         )
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
-        andar_atual = andares_ordenados[0] if andares_ordenados else None
+        andar_inicial = andares_ordenados[0] if andares_ordenados else None
         
         opcoes_andares = [ft.dropdown.Option(key=a, text=f"{a}º Pavimento") for a in andares_ordenados]
-        dropdown_andar = ft.Dropdown(label="Filtrar por Andar", options=opcoes_andares, value=andar_atual, expand=True)
+        dropdown_andar = ft.Dropdown(label="Filtrar por Andar", options=opcoes_andares, value=andar_inicial, expand=True)
 
-        aptos_selecionados = set()
+        aptos_selecionados = set() # Guarda estritamente as strings dos aptos selecionados na tela atual
         grid_aptos = ft.GridView(expand=True, runs_count=4, child_aspect_ratio=1.0, spacing=10, run_spacing=10)
 
-        # === NOVO SISTEMA VISUAL: SEM BORDAS PROBLEMÁTICAS ===
         def desenhar_grid():
             grid_aptos.controls.clear()
-            if not andar_atual: return
+            andar_alvo = dropdown_andar.value # Coleta dinamicamente do controle para evitar travar no 1º andar
+            if not andar_alvo: return
             
             tarefa_atual = dropdown_tarefa.value
-            aptos_do_andar = sorted(banco_dados[obra][andar_atual].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+            aptos_do_andar = sorted(banco_dados[obra][andar_alvo].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
             
             for apto in aptos_do_andar:
-                is_selected = (andar_atual, apto) in aptos_selecionados
+                is_selected = apto in aptos_selecionados
                 
                 cor_fundo = ft.Colors.GREY_300
-                if tarefa_atual and tarefa_atual in banco_dados[obra][andar_atual][apto]:
-                    st = banco_dados[obra][andar_atual][apto][tarefa_atual]["status"]
+                if tarefa_atual and tarefa_atual in banco_dados[obra][andar_alvo][apto]:
+                    st = banco_dados[obra][andar_alvo][apto][tarefa_atual]["status"]
                     cor_fundo = get_cor_status(st)
                 
-                # Controle limpo: Ícone e Opacidade
                 icone = ft.Icons.CHECK_CIRCLE if is_selected else None
-                # Fica 100% visível se selecionado. Se outro estiver selecionado, fica "apagado" (0.5).
                 opacidade = 1.0 if is_selected else (0.5 if aptos_selecionados else 1.0)
                 
-                def toggle_selecao(e, a=andar_atual, ap=apto):
-                    if (a, ap) in aptos_selecionados:
-                        aptos_selecionados.remove((a, ap))
-                    else:
-                        aptos_selecionados.add((a, ap))
-                    desenhar_grid()
+                # Encapsulamento de clique limpo por argumento padrão para isolar o escopo do loop
+                def criar_handler_clique(ap_nome=apto):
+                    def toggle_selecao(e):
+                        if ap_nome in aptos_selecionados:
+                            aptos_selecionados.remove(ap_nome)
+                        else:
+                            aptos_selecionados.add(ap_nome)
+                        desenhar_grid()
+                    return toggle_selecao
                 
                 bloco = ft.Container(
                     content=ft.Column(
@@ -265,45 +263,45 @@ def main(page: ft.Page):
                     ),
                     bgcolor=cor_fundo, 
                     border_radius=8, 
-                    opacity=opacidade, # A mágica do efeito visual acontece aqui
+                    opacity=opacidade,
                     ink=True, 
-                    on_click=toggle_selecao
+                    on_click=criar_handler_clique(apto)
                 )
                 grid_aptos.controls.append(bloco)
             page.update()
 
         def mudar_andar(e):
-            nonlocal andar_atual
-            andar_atual = dropdown_andar.value
-            aptos_selecionados.clear()
+            aptos_selecionados.clear() # Evita aplicar dados em andares cruzados involuntariamente
             desenhar_grid()
             
         dropdown_andar.on_change = mudar_andar
 
         def selecionar_todos_do_andar(e):
-            if not andar_atual: return
-            aptos_do_andar = list(banco_dados[obra][andar_atual].keys())
-            todas_selecionadas = all((andar_atual, ap) in aptos_selecionados for ap in aptos_do_andar)
+            andar_alvo = dropdown_andar.value
+            if not andar_alvo: return
+            aptos_do_andar = list(banco_dados[obra][andar_alvo].keys())
+            todas_selecionadas = all(ap in aptos_selecionados for ap in aptos_do_andar)
             
             if todas_selecionadas:
                 for ap in aptos_do_andar:
-                    aptos_selecionados.discard((andar_atual, ap))
+                    aptos_selecionados.discard(ap)
             else:
                 for ap in aptos_do_andar:
-                    aptos_selecionados.add((andar_atual, ap))
+                    aptos_selecionados.add(ap)
             desenhar_grid()
 
         btn_selecionar_todos = ft.TextButton("Selecionar Tudo", icon=ft.Icons.SELECT_ALL, on_click=selecionar_todos_do_andar)
         linha_filtros = ft.Row([dropdown_andar, btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
 
         def aplicar_lote(e):
+            andar_alvo = dropdown_andar.value # Coleta em tempo de execução o andar exato selecionado
             tarefa = dropdown_tarefa.value
             if not tarefa:
-                dropdown_tarefa.error_text = "Selecione uma!"
+                dropdown_tarefa.error_text = "Selecione uma atividade!"
                 page.update()
                 return
             if not aptos_selecionados:
-                snack = ft.SnackBar(ft.Text("Selecione pelo menos um local!"), bgcolor=ft.Colors.RED_700)
+                snack = ft.SnackBar(ft.Text("Selecione ao menos um apartamento!"), bgcolor=ft.Colors.RED_700)
                 page.overlay.append(snack)
                 snack.open = True
                 page.update()
@@ -311,16 +309,18 @@ def main(page: ft.Page):
             
             status_escolhido = dropdown_status.value
             
-            for (and_sel, apt_sel) in aptos_selecionados:
-                if and_sel in banco_dados[obra] and apt_sel in banco_dados[obra][and_sel]:
-                    if tarefa not in banco_dados[obra][and_sel][apt_sel]:
-                        banco_dados[obra][and_sel][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
+            # Executa a injeção diretamente na árvore correspondente do pavimento alvo
+            for apt_sel in aptos_selecionados:
+                if andar_alvo in banco_dados[obra] and apt_sel in banco_dados[obra][andar_alvo]:
+                    if tarefa not in banco_dados[obra][andar_alvo][apt_sel]:
+                        banco_dados[obra][andar_alvo][apt_sel][tarefa] = {"status": status_chosen, "obs": ""}
                     else:
-                        banco_dados[obra][and_sel][apt_sel][tarefa]["status"] = status_escolhido
+                        banco_dados[obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
             
+            # Sincroniza sem snacks duplicados
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
-            snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso!"), bgcolor=ft.Colors.GREEN_700)
+            snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso no {andar_alvo}º pavimento!"), bgcolor=ft.Colors.GREEN_700)
             page.overlay.append(snack)
             snack.open = True
             
@@ -398,8 +398,10 @@ def main(page: ft.Page):
                     padding=15,
                     border_radius=8,
                     ink=True,
-                    url=url_segura,       
-                    url_target="_self"    
+                    url=ft.Url(
+                        url=url_segura,
+                        target=ft.UrlTarget.SELF,
+                    ),
                 )
                 
                 bloco_botoes_acao.controls.clear()
@@ -629,7 +631,7 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_novo_apto, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_apto)])
         
         desenhar_grid()
-        page.add(cabecalho, grid_aptos, ft.Divider(), linha_add)
+        page.add(cabecalho, grid_aptos, ft.Divider(), linea_add=linha_add)
 
 
     # ==========================================
