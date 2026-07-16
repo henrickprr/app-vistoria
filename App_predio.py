@@ -1,6 +1,7 @@
 import flet as ft
 import json
 import urllib.request
+import urllib.parse # <-- Novo: Garante que o link funcione no celular
 import os
 from fpdf import FPDF 
 from fpdf.enums import XPos, YPos
@@ -165,7 +166,7 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # === CORREÇÃO DO BOTÃO DA JANELA DE DOWNLOAD ===
+        # === O SEGREDO DO CELULAR ESTÁ AQUI ===
         def acionar_pdf(e):
             try:
                 if not os.path.exists("assets"):
@@ -174,19 +175,25 @@ def main(page: ft.Page):
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
-                # Gera o arquivo em nuvem primeiro
+                # Gera o arquivo em nuvem
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
                 
-                # Função ativada pelo botão dentro da janela
+                # Transforma o nome do arquivo em um Link 100% seguro (sem espaços)
+                url_segura = f"/{urllib.parse.quote(nome_pdf)}"
+                
                 def fechar_e_baixar(e):
                     dlg_download.open = False
                     page.update()
-                    # Como responde instantaneamente a um clique humano, o celular permite o download!
-                    page.launch_url(f"/{nome_pdf}")
+                    # Manda o celular abrir o link na mesma janela ("_self"). 
+                    # Isso obriga o Android/iPhone a baixar o arquivo na hora!
+                    page.launch_url(url_segura, web_window_name="_self")
 
-                # Botão "Raiz" construído à mão para nunca dar erro de biblioteca
+                # Botão construído à mão usando Container (Nunca dá erro de sintaxe)
                 botao_baixar_seguro = ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), ft.Text("BAIXAR PDF AGORA", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
+                        ft.Text("CONFIRMAR DOWNLOAD", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
+                    ], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.GREEN_700,
                     padding=15,
                     border_radius=8,
@@ -195,8 +202,8 @@ def main(page: ft.Page):
                 )
 
                 dlg_download = ft.AlertDialog(
-                    title=ft.Text("✅ Relatório Pronto!", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
-                    content=ft.Text("Seu arquivo PDF foi gerado e está pronto para impressão. Clique no botão abaixo para salvar."),
+                    title=ft.Text("✅ Arquivo Gerado!", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
+                    content=ft.Text("O seu PDF está pronto. Clique no botão abaixo para baixar o arquivo no seu dispositivo."),
                     actions=[botao_baixar_seguro],
                     actions_alignment=ft.MainAxisAlignment.CENTER
                 )
