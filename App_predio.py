@@ -311,14 +311,14 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO MÚLTIPLO POR PAVIMENTOS
+    # FERRAMENTA A: STATUS RÁPIDO (Por Andar - Clicar nos Quadradinhos)
     # ==========================================
-    def abrir_tela_lancamento_lote(obra):
+    def abrir_tela_lancamento_status(obra):
         page.controls.clear()
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
-            ft.Text("Lançamento por Andar", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+            ft.Text("Status Rápido", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
@@ -328,33 +328,8 @@ def main(page: ft.Page):
                     servicos_disponiveis.add(s)
         
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
-        
-        dropdown_tarefa = ft.Dropdown(
-            label="Qual Atividade?", 
-            options=opcoes_tarefas, 
-            expand=True
-        )
-
-        def popup_nova_tarefa(e):
-            campo_nova = ft.TextField(label="Nome da Nova Atividade")
-            def add_nova(e):
-                val = campo_nova.value.strip().replace(".", "")
-                if val:
-                    dropdown_tarefa.options.append(ft.dropdown.Option(val))
-                    dropdown_tarefa.value = val
-                    dlg_nova.open = False
-                    page.update()
-            dlg_nova = ft.AlertDialog(
-                title=ft.Text("Nova Atividade"),
-                content=campo_nova,
-                actions=[ft.TextButton("Adicionar", on_click=add_nova)]
-            )
-            page.overlay.append(dlg_nova)
-            dlg_nova.open = True
-            page.update()
-            
-        btn_nova_tarefa = ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=40, on_click=popup_nova_tarefa)
-        linha_tarefa = ft.Row([dropdown_tarefa, btn_nova_tarefa])
+        dropdown_tarefa = ft.Dropdown(label="Qual Atividade?", options=opcoes_tarefas, expand=True)
+        dropdown_tarefa.on_change = lambda _: desenhar_grid()
 
         dropdown_status = ft.Dropdown(
             label="Status a Aplicar",
@@ -368,6 +343,156 @@ def main(page: ft.Page):
             value="Finalizado",
             expand=True
         )
+
+        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+        andar_inicial = andares_ordenados[0] if andares_ordenados else None
+        
+        opcoes_andares = [ft.dropdown.Option(key=a, text=f"{a}º Pavimento") for a in andares_ordenados]
+        dropdown_andar = ft.Dropdown(label="Qual Andar?", options=opcoes_andares, value=andar_inicial, expand=True)
+
+        aptos_selecionados = set() 
+        grid_aptos = ft.GridView(expand=True, runs_count=4, child_aspect_ratio=1.0, spacing=10, run_spacing=10)
+
+        def desenhar_grid():
+            grid_aptos.controls.clear()
+            andar_alvo = dropdown_andar.value 
+            if not andar_alvo: return
+            
+            tarefa_atual = dropdown_tarefa.value
+            aptos_do_andar = sorted(banco_dados[obra][andar_alvo].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+            
+            for apto in aptos_do_andar:
+                is_selected = apto in aptos_selecionados
+                
+                cor_fundo = ft.Colors.GREY_300
+                if tarefa_atual and tarefa_atual in banco_dados[obra][andar_alvo][apto]:
+                    st = banco_dados[obra][andar_alvo][apto][tarefa_atual]["status"]
+                    cor_fundo = get_cor_status(st)
+                
+                icone = ft.Icons.CHECK_CIRCLE if is_selected else None
+                opacidade = 1.0 if is_selected else (0.5 if aptos_selecionados else 1.0)
+                
+                def criar_handler_clique(ap_nome=apto):
+                    def toggle_selecao(e):
+                        if ap_nome in aptos_selecionados:
+                            aptos_selecionados.remove(ap_nome)
+                        else:
+                            aptos_selecionados.add(ap_nome)
+                        desenhar_grid()
+                    return toggle_selecao
+                
+                bloco = ft.Container(
+                    content=ft.Column(
+                        [
+                            ft.Icon(icone, color=ft.Colors.WHITE, size=24) if icone else ft.Container(height=24),
+                            ft.Text(apto, size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+                        ], 
+                        alignment=ft.MainAxisAlignment.CENTER, 
+                        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                    ),
+                    bgcolor=cor_fundo, 
+                    border_radius=8, 
+                    opacity=opacidade,
+                    ink=True, 
+                    on_click=criar_handler_clique(apto)
+                )
+                grid_aptos.controls.append(bloco)
+            page.update()
+
+        def mudar_andar(e):
+            aptos_selecionados.clear() 
+            desenhar_grid()
+            
+        dropdown_andar.on_change = mudar_andar
+
+        def aplicar_status_lote(e):
+            andar_alvo = dropdown_andar.value 
+            tarefa = dropdown_tarefa.value
+            if not tarefa:
+                dropdown_tarefa.error_text = "Selecione uma atividade!"
+                page.update()
+                return
+            if not aptos_selecionados:
+                snack = ft.SnackBar(ft.Text("Selecione ao menos um apartamento!"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+                return
+            
+            status_escolhido = dropdown_status.value
+            
+            for apt_sel in aptos_selecionados:
+                if andar_alvo in banco_dados[obra] and apt_sel in banco_dados[obra][andar_alvo]:
+                    if tarefa not in banco_dados[obra][andar_alvo][apt_sel]:
+                        banco_dados[obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
+                    else:
+                        banco_dados[obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
+            
+            salvar_no_firebase(banco_dados, mostrar_snack=False)
+            
+            snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso!"), bgcolor=ft.Colors.GREEN_700)
+            page.overlay.append(snack)
+            snack.open = True
+            
+            aptos_selecionados.clear()
+            desenhar_grid()
+
+        botao_aplicar = ft.Container(
+            content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("ATUALIZAR APARTAMENTOS", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=ft.Colors.ORANGE_700, padding=15, border_radius=8, ink=True, on_click=aplicar_status_lote
+        )
+
+        desenhar_grid()
+        
+        layout = ft.Column([
+            ft.Row([dropdown_tarefa, dropdown_status]),
+            dropdown_andar,
+            ft.Divider(),
+            ft.Text("Toque nos apartamentos para atualizar:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+            ft.Container(content=grid_aptos, expand=True)
+        ], expand=True)
+
+        page.add(cabecalho, layout, botao_aplicar)
+
+
+    # ==========================================
+    # FERRAMENTA B: NOVA TAREFA (Vários Andares - Checkboxes)
+    # ==========================================
+    def abrir_tela_lancamento_tarefas(obra):
+        page.controls.clear()
+        
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
+            ft.Text("Distribuir Tarefa", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+        ])
+
+        servicos_disponiveis = set(lista_servicos_base)
+        for and_dados in banco_dados[obra].values():
+            for ap_dados in and_dados.values():
+                for s in ap_dados.keys():
+                    servicos_disponiveis.add(s)
+        
+        opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
+        dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade", options=opcoes_tarefas, expand=True)
+
+        def popup_nova_tarefa(e):
+            campo_nova = ft.TextField(label="Digite o Nome da Nova Atividade")
+            def add_nova(e):
+                val = campo_nova.value.strip().replace(".", "")
+                if val:
+                    dropdown_tarefa.options.append(ft.dropdown.Option(val))
+                    dropdown_tarefa.value = val
+                    dlg_nova.open = False
+                    page.update()
+            dlg_nova = ft.AlertDialog(
+                title=ft.Text("Nova Atividade"), content=campo_nova, actions=[ft.TextButton("Adicionar", on_click=add_nova)]
+            )
+            page.overlay.append(dlg_nova)
+            dlg_nova.open = True
+            page.update()
+            
+        btn_nova_tarefa = ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=40, on_click=popup_nova_tarefa)
+        linha_tarefa = ft.Row([dropdown_tarefa, btn_nova_tarefa])
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
@@ -388,34 +513,30 @@ def main(page: ft.Page):
 
         btn_selecionar_todos = ft.TextButton("Selecionar Todos", icon=ft.Icons.SELECT_ALL, on_click=selecionar_todos_andares)
 
-        def aplicar_lote(e):
+        def aplicar_tarefa_lote(e):
             tarefa = dropdown_tarefa.value
             if not tarefa:
-                dropdown_tarefa.error_text = "Selecione uma atividade!"
+                dropdown_tarefa.error_text = "Selecione ou crie uma!"
                 page.update()
                 return
             
             andares_selecionados = [andar for andar, cb in checkboxes_andares.items() if cb.value]
-            
             if not andares_selecionados:
-                snack = ft.SnackBar(ft.Text("Marque pelo menos um Andar nas checkboxes!"), bgcolor=ft.Colors.RED_700)
+                snack = ft.SnackBar(ft.Text("Marque pelo menos um Andar!"), bgcolor=ft.Colors.RED_700)
                 page.overlay.append(snack)
                 snack.open = True
                 page.update()
                 return
             
-            status_escolhido = dropdown_status.value
-            
+            # Adiciona a tarefa como "Não Iniciado" em todos os andares marcados
             for andar_alvo in andares_selecionados:
                 for apto in banco_dados[obra][andar_alvo].keys():
                     if tarefa not in banco_dados[obra][andar_alvo][apto]:
-                        banco_dados[obra][andar_alvo][apto][tarefa] = {"status": status_escolhido, "obs": ""}
-                    else:
-                        banco_dados[obra][andar_alvo][apto][tarefa]["status"] = status_escolhido
+                        banco_dados[obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
-            snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado em {len(andares_selecionados)} andares de uma vez!"), bgcolor=ft.Colors.GREEN_700)
+            snack = ft.SnackBar(ft.Text(f"✅ Tarefa '{tarefa}' adicionada em {len(andares_selecionados)} andares!"), bgcolor=ft.Colors.PURPLE_700)
             page.overlay.append(snack)
             snack.open = True
             
@@ -424,29 +545,157 @@ def main(page: ft.Page):
             page.update()
 
         botao_aplicar = ft.Container(
-            content=ft.Row(
-                [
-                    ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), 
-                    ft.Text("APLICAR STATUS NOS ANDARES", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=14)
-                ], 
-                alignment=ft.MainAxisAlignment.CENTER
-            ),
-            bgcolor=ft.Colors.GREEN_700, 
-            padding=15, 
-            border_radius=8, 
-            ink=True, 
-            on_click=aplicar_lote
+            content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("DISTRIBUIR TAREFA", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)], alignment=ft.MainAxisAlignment.CENTER),
+            bgcolor=ft.Colors.PURPLE_700, padding=15, border_radius=8, ink=True, on_click=aplicar_tarefa_lote
         )
 
         layout = ft.Column([
             linha_tarefa,
-            dropdown_status,
+            ft.Text("A nova tarefa será criada como 'Não Iniciado'.", size=11, color=ft.Colors.GREY_600),
             ft.Divider(),
-            ft.Row([ft.Text("ESCOLHA OS PAVIMENTOS:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Row([ft.Text("ONDE ELA DEVE APARECER?", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Container(content=grid_andares, expand=True)
         ], expand=True)
 
         page.add(cabecalho, layout, botao_aplicar)
+
+
+    # ==========================================
+    # TELA 5: RELATÓRIO MATRICIAL (App Web)
+    # ==========================================
+    def abrir_tela_relatorio(obra, servico_escolhido):
+        page.controls.clear()
+
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
+            ft.Text(f"Relatório: {servico_escolhido}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
+        ])
+
+        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+
+        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+        def acionar_pdf(e):
+            try:
+                botao_exportar.content.controls[1].value = "A Gerar Ficheiro..."
+                page.update()
+                
+                if not os.path.exists("assets"):
+                    os.makedirs("assets")
+                
+                padrao_busca = os.path.join("assets", f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}*.pdf")
+                for arquivo_antigo in glob.glob(padrao_busca):
+                    try:
+                        os.remove(arquivo_antigo)
+                    except:
+                        pass
+                    
+                timestamp = int(time.time())
+                nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}_{timestamp}.pdf"
+                caminho_completo = os.path.join("assets", nome_pdf)
+
+                gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
+                url_segura = f"/{urllib.parse.quote(nome_pdf)}"
+                
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                
+                botao_download = ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
+                            ft.Text("CLIQUE AQUI PARA ABRIR O PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
+                        ], 
+                        alignment=ft.MainAxisAlignment.CENTER
+                    ),
+                    bgcolor=ft.Colors.BLUE_600,
+                    padding=15,
+                    border_radius=8,
+                    ink=True,
+                    url=ft.Url(
+                        url=url_segura,
+                        target=ft.UrlTarget.SELF,
+                    ),
+                )
+                
+                bloco_botoes_acao.controls.clear()
+                bloco_botoes_acao.controls.append(botao_exportar)
+                bloco_botoes_acao.controls.append(botao_download)
+                page.update()
+                
+            except Exception as ex:
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                snack_erro = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack_erro)
+                snack_erro.open = True
+                page.update()
+
+        botao_exportar = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), 
+                    ft.Text("Gerar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+                ], 
+                alignment=ft.MainAxisAlignment.CENTER
+            ),
+            bgcolor=ft.Colors.RED_700, 
+            padding=12, 
+            border_radius=8, 
+            ink=True, 
+            on_click=acionar_pdf
+        )
+
+        bloco_botoes_acao.controls.append(botao_exportar)
+
+        legenda = ft.Row([
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.RED_500, border_radius=3), ft.Text("Pend.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.BLUE_500, border_radius=3), ft.Text("Andam.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.ORANGE_500, border_radius=3), ft.Text("Existente", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREY_400, border_radius=3), ft.Text("Não Iniciado", size=12),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+
+        tabela = ft.Column(spacing=5)
+        
+        largura_celulas_horizontais = (35 * 14) + (5 * 14) + 45 
+        
+        linha_super_header = ft.Row([
+            ft.Container(width=60), 
+            ft.Container(
+                width=largura_celulas_horizontais, 
+                content=ft.Row([ft.Text("APARTAMENTOS E LOCAIS →", weight=ft.FontWeight.BOLD, size=11, color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.BLUE_50, border_radius=4, padding=2
+            )
+        ], spacing=5)
+        tabela.controls.append(linha_super_header)
+
+        linha_header = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text("Andar ↓", weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+        for apto_num in range(1, 15):
+            linha_header.controls.append(ft.Container(width=35, content=ft.Row([ft.Text(f"{apto_num:02d}", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+        linha_header.controls.append(ft.Container(width=45, content=ft.Row([ft.Text("Corr.", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+        tabela.controls.append(linha_header)
+
+        for andar in andares_ordenados:
+            linha_andar = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text(f"{andar}º", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+            
+            locais_matriz = [f"{andar}{apto_num:02d}" for apto_num in range(1, 15)] + ["Corredor"]
+            
+            for local_str in locais_matriz:
+                status_atual = "Não Iniciado" 
+                if local_str in banco_dados[obra][andar] and servico_escolhido in banco_dados[obra][andar][local_str]:
+                    status_atual = banco_dados[obra][andar][local_str][servico_escolhido]["status"]
+                
+                cor_quadrado = get_cor_status(status_atual)
+                largura_celula = 45 if local_str == "Corredor" else 35
+                
+                quadrado = ft.Container(width=largura_celula, height=35, bgcolor=cor_quadrado, border_radius=4, tooltip=f"{local_str}: {status_atual}")
+                linha_andar.controls.append(quadrado)
+                
+            tabela.controls.append(linha_andar)
+
+        area_rolagem = ft.Row([ft.Column([tabela], scroll=ft.ScrollMode.AUTO)], scroll=ft.ScrollMode.AUTO, expand=True)
+
+        page.add(cabecalho, bloco_botoes_acao, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
+        page.update()
 
 
     # ==========================================
@@ -654,19 +903,28 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        botoes_acao_obra = ft.Row([
-            ft.Container(
-                content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=18), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
-                bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio, expand=True
-            ),
-            ft.Container(
-                content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE, size=18), ft.Text("Lote Andar", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
-                bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_lote(obra), expand=True
-            ),
-            ft.Container(
-                content=ft.Row([ft.Icon(ft.Icons.BAR_CHART, color=ft.Colors.WHITE, size=18), ft.Text("Painel", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
-                bgcolor=ft.Colors.TEAL_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_dashboard(obra), expand=True
-            )
+        # O NOVO LAYOUT DO CABEÇALHO COM OS 4 BOTÕES MÁGICOS
+        botoes_acao_obra = ft.Column([
+            ft.Row([
+                ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=16), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio, expand=True
+                ),
+                ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.BAR_CHART, color=ft.Colors.WHITE, size=16), ft.Text("Painel", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.TEAL_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_dashboard(obra), expand=True
+                )
+            ], spacing=8),
+            ft.Row([
+                ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Status Rápido", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_status(obra), expand=True
+                ),
+                ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE, size=16), ft.Text("Nova Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.PURPLE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_tarefas(obra), expand=True
+                )
+            ], spacing=8)
         ], spacing=8)
 
         lista_andares = ft.ListView(expand=True, spacing=10)
