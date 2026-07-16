@@ -170,7 +170,8 @@ def main(page: ft.Page):
 
         def acionar_pdf(e):
             try:
-                botao_exportar.content.controls[1].value = "Gerando Ficheiro..."
+                # Mostra o status a gerar
+                botao_exportar.content.controls[1].value = "A Gerar Ficheiro..."
                 page.update()
                 
                 if not os.path.exists("assets"):
@@ -179,22 +180,32 @@ def main(page: ft.Page):
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
+                # Gera o PDF
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
+                
+                # Prepara o link direto
                 url_segura = f"/{urllib.parse.quote(nome_pdf)}"
                 
+                # Restaura o botão original
                 botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
                 
+                # CRIA O BOTÃO BLINDADO DE DOWNLOAD USANDO CONTAINER NATIVO
+                botao_download = ft.Container(
+                    content=ft.Row([
+                        ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
+                        ft.Text("CLIQUE AQUI PARA BAIXAR PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
+                    ], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.BLUE_600,
+                    padding=15,
+                    border_radius=8,
+                    url=url_segura,       # O Container abre o link automaticamente!
+                    url_target="_self"    # _self força o navegador a fazer o download
+                )
+                
+                # Atualiza a área de botões na tela
                 bloco_botoes_acao.controls.clear()
                 bloco_botoes_acao.controls.append(botao_exportar)
-                bloco_botoes_acao.controls.append(
-                    ft.FilledButton(
-                        text="📥 CLIQUE AQUI PARA DESCARREGAR PDF",
-                        icon=ft.Icons.DOWNLOAD,
-                        url=url_segura,
-                        width=380,
-                        height=48
-                    )
-                )
+                bloco_botoes_acao.controls.append(botao_download)
                 page.update()
                 
             except Exception as ex:
@@ -479,7 +490,6 @@ def main(page: ft.Page):
         linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
 
         desenhar_lista_andares()
-        # ERRO CORRIGIDO AQUI NA LINHA DE BAIXO (apenas linha_add)
         page.add(cabecalho, botao_relatorio, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
 
 
