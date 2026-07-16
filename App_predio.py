@@ -3,6 +3,8 @@ import json
 import urllib.request
 import os
 from fpdf import FPDF 
+# CORREÇÃO CRÍTICA: Importando os seletores de posição oficiais do FPDF2
+from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
 
@@ -45,8 +47,9 @@ def main(page: ft.Page):
             req.add_header('Content-Type', 'application/json')
             urllib.request.urlopen(req)
             
-            page.snack_bar = ft.SnackBar(ft.Text("☁️ Sincronizado com o Firebase!", color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_700, duration=1500)
-            page.snack_bar.open = True
+            snack = ft.SnackBar(ft.Text("☁️ Sincronizado com o Firebase!", color=ft.Colors.WHITE), bgcolor=ft.Colors.GREEN_700)
+            page.overlay.append(snack)
+            snack.open = True
             page.update()
         except Exception as e:
             pass
@@ -82,7 +85,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # FUNÇÃO DE GERAÇÃO DO ARQUIVO PDF 
+    # FUNÇÃO DE GERAÇÃO DO ARQUIVO PDF (CORRIGIDA)
     # ==========================================
     def gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_arquivo):
         pdf = FPDF(orientation='L', unit='mm', format='A4') 
@@ -90,16 +93,17 @@ def main(page: ft.Page):
         pdf.add_page()
         
         pdf.set_font("helvetica", 'B', 15)
-        pdf.cell(0, 8, f"RELATÓRIO DE VISTORIA - {obra.upper()}", new_x="LMARGIN", new_y="NEXT", align='C')
+        pdf.cell(0, 8, f"RELATÓRIO DE VISTORIA - {obra.upper()}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         pdf.set_font("helvetica", 'B', 11)
-        pdf.cell(0, 6, f"Atividade: {servico_escolhido}", new_x="LMARGIN", new_y="NEXT", align='C')
+        pdf.cell(0, 6, f"Atividade: {servico_escolhido}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         pdf.ln(3)
 
+        # Legenda corrigida com Enums oficiais do FPDF2
         pdf.set_font("helvetica", 'B', 9)
-        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x="RIGHT", new_y="TOP"); pdf.cell(16, 5, " OK", new_x="RIGHT", new_y="TOP")
-        pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x="RIGHT", new_y="TOP"); pdf.cell(22, 5, " Pendente", new_x="RIGHT", new_y="TOP")
-        pdf.set_fill_color(33, 150, 243); pdf.cell(8, 5, "", border=1, fill=True, new_x="RIGHT", new_y="TOP"); pdf.cell(24, 5, " Em Andam.", new_x="RIGHT", new_y="TOP")
-        pdf.set_fill_color(189, 189, 189); pdf.cell(8, 5, "", border=1, fill=True, new_x="RIGHT", new_y="TOP"); pdf.cell(30, 5, " Não Iniciado", new_x="LMARGIN", new_y="NEXT")
+        pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(16, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Pendente", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(33, 150, 243); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(24, 5, " Em Andam.", new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.set_fill_color(189, 189, 189); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(30, 5, " Não Iniciado", new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         pdf.ln(4)
 
         largura_andar = 20
@@ -113,21 +117,21 @@ def main(page: ft.Page):
 
         pdf.set_font("helvetica", 'B', 10)
         pdf.set_fill_color(230, 230, 230) 
-        pdf.cell(largura_andar, altura_celula, "", border=0, new_x="RIGHT", new_y="TOP") 
+        pdf.cell(largura_andar, altura_celula, "", border=0, new_x=XPos.RIGHT, new_y=YPos.TOP) 
         largura_horizontal = (14 * largura_apto) + largura_corr
-        pdf.cell(largura_horizontal, altura_celula, "APARTAMENTOS ->", border=1, align='C', fill=True, new_x="LMARGIN", new_y="NEXT")
+        pdf.cell(largura_horizontal, altura_celula, "APARTAMENTOS ->", border=1, align='C', fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
         
         pdf.set_x(margem_esq)
         pdf.set_font("helvetica", 'B', 10)
-        pdf.cell(largura_andar, altura_celula, "Andar v", border=1, align='C', new_x="RIGHT", new_y="TOP")
+        pdf.cell(largura_andar, altura_celula, "Andar v", border=1, align='C', new_x=XPos.RIGHT, new_y=YPos.TOP)
         for i in range(1, 15):
-            pdf.cell(largura_apto, altura_celula, f"{i:02d}", border=1, align='C', new_x="RIGHT", new_y="TOP")
-        pdf.cell(largura_corr, altura_celula, "Corr.", border=1, align='C', new_x="LMARGIN", new_y="NEXT")
+            pdf.cell(largura_apto, altura_celula, f"{i:02d}", border=1, align='C', new_x=XPos.RIGHT, new_y=YPos.TOP)
+        pdf.cell(largura_corr, altura_celula, "Corr.", border=1, align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
 
         for andar in andares_ordenados:
             pdf.set_x(margem_esq)
             pdf.set_font("helvetica", 'B', 10)
-            pdf.cell(largura_andar, altura_celula, f"{andar}º", border=1, align='C', new_x="RIGHT", new_y="TOP")
+            pdf.cell(largura_andar, altura_celula, f"{andar}º", border=1, align='C', new_x=XPos.RIGHT, new_y=YPos.TOP)
             
             locais = [f"{andar}{apto:02d}" for apto in range(1, 15)] + ["Corredor"]
             for i, local in enumerate(locais):
@@ -143,9 +147,9 @@ def main(page: ft.Page):
                 larg = largura_corr if local == "Corredor" else largura_apto
                 
                 if i == len(locais) - 1:
-                    pdf.cell(larg, altura_celula, "", border=1, fill=True, new_x="LMARGIN", new_y="NEXT")
+                    pdf.cell(larg, altura_celula, "", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                 else:
-                    pdf.cell(larg, altura_celula, "", border=1, fill=True, new_x="RIGHT", new_y="TOP")
+                    pdf.cell(larg, altura_celula, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP)
 
         pdf.output(caminho_arquivo)
 
@@ -163,33 +167,28 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        # === CORREÇÃO DO BLOQUEIO DE CELULAR AQUI ===
         def acionar_pdf(e):
             try:
-                # Garante que a pasta existe no servidor
                 if not os.path.exists("assets"):
                     os.makedirs("assets")
                     
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
-                # Gera o arquivo em nuvem
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
                 
-                # Função para fechar a janelinha quando o usuário clicar em baixar
                 def fechar_dlg_download(e):
                     dlg_download.open = False
                     page.update()
 
-                # Cria uma Janelinha com um link HTML nativo (infalível em celulares)
                 dlg_download = ft.AlertDialog(
                     title=ft.Text("✅ Relatório Pronto!", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
                     content=ft.Text("Seu arquivo PDF foi gerado e está pronto para impressão. Clique no botão abaixo para abrir/salvar."),
                     actions=[
                         ft.ElevatedButton(
                             text="📥 Baixar PDF", 
-                            url=f"/{nome_pdf}", # <- O celular enxerga isso como um link normal
-                            url_target="_blank", # Tenta abrir o PDF em uma nova aba/leitor do celular
+                            url=f"/{nome_pdf}", 
+                            url_target="_blank", 
                             bgcolor=ft.Colors.GREEN_700, 
                             color=ft.Colors.WHITE,
                             on_click=fechar_dlg_download
@@ -203,8 +202,9 @@ def main(page: ft.Page):
                 page.update()
                 
             except Exception as ex:
-                page.snack_bar = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
-                page.snack_bar.open = True
+                snack_erro = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack_erro)
+                snack_erro.open = True
                 page.update()
 
         botao_exportar = ft.Container(
@@ -530,12 +530,8 @@ def main(page: ft.Page):
     abrir_tela_obras()
 
 
-# 1. Garante que a pasta assets existe antes do aplicativo ligar
 os.makedirs("assets", exist_ok=True)
-
-# 2. Pega a porta que o Render exige ou roda na 8000 se for local
 porta = int(os.environ.get("PORT", 8000))
 
-# 3. Inicia nativamente criando o servidor Uvicorn interno sem o Flet CLI
 if __name__ == "__main__":
     ft.app(target=main, view=ft.AppView.WEB_BROWSER, port=porta, host="0.0.0.0", assets_dir="assets")
