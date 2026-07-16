@@ -3,7 +3,6 @@ import json
 import urllib.request
 import os
 from fpdf import FPDF 
-# CORREÇÃO CRÍTICA: Importando os seletores de posição oficiais do FPDF2
 from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
@@ -85,7 +84,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # FUNÇÃO DE GERAÇÃO DO ARQUIVO PDF (CORRIGIDA)
+    # FUNÇÃO DE GERAÇÃO DO ARQUIVO PDF
     # ==========================================
     def gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_arquivo):
         pdf = FPDF(orientation='L', unit='mm', format='A4') 
@@ -98,7 +97,6 @@ def main(page: ft.Page):
         pdf.cell(0, 6, f"Atividade: {servico_escolhido}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         pdf.ln(3)
 
-        # Legenda corrigida com Enums oficiais do FPDF2
         pdf.set_font("helvetica", 'B', 9)
         pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(16, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(22, 5, " Pendente", new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -167,6 +165,7 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
+        # === CORREÇÃO DO BOTÃO DA JANELA DE DOWNLOAD ===
         def acionar_pdf(e):
             try:
                 if not os.path.exists("assets"):
@@ -175,25 +174,30 @@ def main(page: ft.Page):
                 nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
+                # Gera o arquivo em nuvem primeiro
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
                 
-                def fechar_dlg_download(e):
+                # Função ativada pelo botão dentro da janela
+                def fechar_e_baixar(e):
                     dlg_download.open = False
                     page.update()
+                    # Como responde instantaneamente a um clique humano, o celular permite o download!
+                    page.launch_url(f"/{nome_pdf}")
+
+                # Botão "Raiz" construído à mão para nunca dar erro de biblioteca
+                botao_baixar_seguro = ft.Container(
+                    content=ft.Row([ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), ft.Text("BAIXAR PDF AGORA", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)], alignment=ft.MainAxisAlignment.CENTER),
+                    bgcolor=ft.Colors.GREEN_700,
+                    padding=15,
+                    border_radius=8,
+                    ink=True,
+                    on_click=fechar_e_baixar
+                )
 
                 dlg_download = ft.AlertDialog(
                     title=ft.Text("✅ Relatório Pronto!", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
-                    content=ft.Text("Seu arquivo PDF foi gerado e está pronto para impressão. Clique no botão abaixo para abrir/salvar."),
-                    actions=[
-                        ft.ElevatedButton(
-                            text="📥 Baixar PDF", 
-                            url=f"/{nome_pdf}", 
-                            url_target="_blank", 
-                            bgcolor=ft.Colors.GREEN_700, 
-                            color=ft.Colors.WHITE,
-                            on_click=fechar_dlg_download
-                        )
-                    ],
+                    content=ft.Text("Seu arquivo PDF foi gerado e está pronto para impressão. Clique no botão abaixo para salvar."),
+                    actions=[botao_baixar_seguro],
                     actions_alignment=ft.MainAxisAlignment.CENTER
                 )
 
