@@ -3,6 +3,8 @@ import json
 import urllib.request
 import urllib.parse 
 import os
+import time       # <--- NOVO: Adicionado para gerar nomes únicos
+import glob       # <--- NOVO: Adicionado para limpar os relatórios antigos
 from fpdf import FPDF 
 from fpdf.enums import XPos, YPos
 
@@ -100,7 +102,6 @@ def main(page: ft.Page):
         pdf.cell(0, 6, f"Atividade: {servico_escolhido}", new_x=XPos.LMARGIN, new_y=YPos.NEXT, align='C')
         pdf.ln(3)
 
-        # Legenda do PDF Atualizada com o status Existente
         pdf.set_font("helvetica", 'B', 9)
         pdf.set_fill_color(76, 175, 80); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(14, 5, " OK", new_x=XPos.RIGHT, new_y=YPos.TOP)
         pdf.set_fill_color(244, 67, 54); pdf.cell(8, 5, "", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP); pdf.cell(20, 5, " Pend.", new_x=XPos.RIGHT, new_y=YPos.TOP)
@@ -379,8 +380,18 @@ def main(page: ft.Page):
                 
                 if not os.path.exists("assets"):
                     os.makedirs("assets")
+                
+                # === NOVO: LIMPEZA DOS PDFs ANTIGOS ===
+                padrao_busca = os.path.join("assets", f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}*.pdf")
+                for arquivo_antigo in glob.glob(padrao_busca):
+                    try:
+                        os.remove(arquivo_antigo)
+                    except:
+                        pass
                     
-                nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}.pdf"
+                # === NOVO: CARIMBO DE TEMPO NO NOME DO ARQUIVO ===
+                timestamp = int(time.time())
+                nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}_{timestamp}.pdf"
                 caminho_completo = os.path.join("assets", nome_pdf)
 
                 gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
@@ -435,7 +446,6 @@ def main(page: ft.Page):
 
         bloco_botoes_acao.controls.append(botao_exportar)
 
-        # Legenda da tela do App com o status Existente em Laranja
         legenda = ft.Row([
             ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
             ft.Container(width=15, height=15, bgcolor=ft.Colors.RED_500, border_radius=3), ft.Text("Pend.", size=12),
