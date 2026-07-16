@@ -160,139 +160,162 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 7: PAINEL DE INDICADORES (NOVA TELA)
+    # TELA 7: PAINEL DE INDICADORES BLINDADO
     # ==========================================
     def abrir_tela_dashboard(obra):
         page.controls.clear()
         
+        # O cabeçalho é desenhado logo no início para garantir que, caso falhe, a seta exista!
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
             ft.Text("Métricas da Obra", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
         ])
 
-        total_tarefas = 0
-        total_finalizado = 0
-        total_andamento = 0
-        total_conforme = 0
-        total_existente = 0
+        try:
+            total_tarefas = 0
+            total_finalizado = 0
+            total_andamento = 0
+            total_conforme = 0
+            total_existente = 0
 
-        stats_atividade = {}
+            stats_atividade = {}
 
-        if obra in banco_dados:
-            for andar, apartamentos in banco_dados[obra].items():
-                for apto, atividades in apartamentos.items():
-                    for atividade, dados in atividades.items():
-                        status = dados.get("status", "Não Iniciado")
-                        
-                        if atividade not in stats_atividade:
-                            stats_atividade[atividade] = {"total": 0, "finalizado": 0}
-                        
-                        stats_atividade[atividade]["total"] += 1
-                        if status == "Finalizado":
-                            stats_atividade[atividade]["finalizado"] += 1
-                            total_finalizado += 1
-                        elif status == "Em Andamento":
-                            total_andamento += 1
-                        elif status == "Não Conforme":
-                            total_conforme += 1
-                        elif status == "Existente":
-                            total_existente += 1
-                        
-                        total_tarefas += 1
+            if obra in banco_dados:
+                for andar, apartamentos in banco_dados[obra].items():
+                    if isinstance(apartamentos, dict):  # Proteção de formato
+                        for apto, atividades in apartamentos.items():
+                            if isinstance(atividades, dict):  # Proteção de formato
+                                for atividade, dados in atividades.items():
+                                    if isinstance(dados, dict):  # Proteção de formato
+                                        status = dados.get("status", "Não Iniciado")
+                                        
+                                        if atividade not in stats_atividade:
+                                            stats_atividade[atividade] = {"total": 0, "finalizado": 0}
+                                        
+                                        stats_atividade[atividade]["total"] += 1
+                                        if status == "Finalizado" or status == "Existente":
+                                            stats_atividade[atividade]["finalizado"] += 1
+                                            if status == "Finalizado":
+                                                total_finalizado += 1
+                                            else:
+                                                total_existente += 1
+                                        elif status == "Em Andamento":
+                                            total_andamento += 1
+                                        elif status == "Não Conforme":
+                                            total_conforme += 1
+                                        
+                                        total_tarefas += 1
 
-        pct_geral = (total_finalizado / total_tarefas) if total_tarefas > 0 else 0
+            pct_geral = ((total_finalizado + total_existente) / total_tarefas) if total_tarefas > 0 else 0
 
-        card_progresso_geral = ft.Container(
-            content=ft.Column(
-                [
-                    ft.Text("PROGRESSO TOTAL CONCLUÍDO", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
-                    ft.Row(
-                        [
-                            ft.Text(f"{pct_geral * 100:.1f}%", size=34, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800),
-                            ft.Text("de metas atingidas", size=13, color=ft.Colors.GREY_600)
-                        ], 
-                        alignment=ft.MainAxisAlignment.START, 
-                        vertical_alignment=ft.CrossAxisAlignment.BASELINE
-                    ),
-                    ft.ProgressBar(value=pct_geral, color=ft.Colors.BLUE_700, bgcolor=ft.Colors.GREY_200, height=10)
-                ], 
-                spacing=4
-            ),
-            bgcolor=ft.Colors.BLUE_50,
-            padding=16,
-            border_radius=10
-        )
-
-        grid_contadores = ft.Row(
-            [
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("OK", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
-                        ft.Text(str(total_finalizado), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.GREEN_50, padding=10, border_radius=8, expand=True
+            card_progresso_geral = ft.Container(
+                content=ft.Column(
+                    [
+                        ft.Text("PROGRESSO TOTAL CONCLUÍDO", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                        ft.Row(
+                            [
+                                ft.Text(f"{pct_geral * 100:.1f}%", size=34, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800),
+                                ft.Text("de metas atingidas", size=13, color=ft.Colors.GREY_600)
+                            ], 
+                            alignment=ft.MainAxisAlignment.START, 
+                            vertical_alignment=ft.CrossAxisAlignment.END # <- Corrigido para evitar bugs do Flet
+                        ),
+                        # Barra de progresso protegida por um Container
+                        ft.Container(
+                            content=ft.ProgressBar(value=pct_geral, color=ft.Colors.BLUE_700, bgcolor=ft.Colors.GREY_200),
+                            height=10
+                        )
+                    ], 
+                    spacing=4
                 ),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("ANDAM.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                        ft.Text(str(total_andamento), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=8, expand=True
-                ),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("PEND.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700),
-                        ft.Text(str(total_conforme), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700)
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.RED_50, padding=10, border_radius=8, expand=True
-                ),
-                ft.Container(
-                    content=ft.Column([
-                        ft.Text("EXIST.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700),
-                        ft.Text(str(total_existente), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700)
-                    ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.ORANGE_50, padding=10, border_radius=8, expand=True
-                )
-            ], 
-            spacing=6
-        )
-
-        lista_atividades_progresso = ft.ListView(expand=True, spacing=14)
-
-        for ativ, dados_at in sorted(stats_atividade.items()):
-            tot = dados_at["total"]
-            fin = dados_at["finalizado"]
-            pct_ativ = (fin / tot) if tot > 0 else 0
-            
-            item_progresso = ft.Column(
-                [
-                    ft.Row(
-                        [
-                            ft.Text(ativ, size=13, weight=ft.FontWeight.W_600, color=ft.Colors.GREY_800, expand=True),
-                            ft.Text(f"{fin}/{tot} ({pct_ativ * 100:.0f}%)", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)
-                        ], 
-                        alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                    ),
-                    ft.ProgressBar(value=pct_ativ, color=ft.Colors.GREEN_500, bgcolor=ft.Colors.GREY_200, height=6)
-                ], 
-                spacing=3
+                bgcolor=ft.Colors.BLUE_50,
+                padding=16,
+                border_radius=10
             )
-            lista_atividades_progresso.controls.append(item_progresso)
 
-        page.add(
-            cabecalho,
-            card_progresso_geral,
-            ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-            grid_contadores,
-            ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-            ft.Text("EVOLUÇÃO POR ATIVIDADE", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
-            lista_atividades_progresso
-        )
-        page.update()
+            grid_contadores = ft.Row(
+                [
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("OK", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
+                            ft.Text(str(total_finalizado), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        bgcolor=ft.Colors.GREEN_50, padding=10, border_radius=8, expand=True
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("ANDAM.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
+                            ft.Text(str(total_andamento), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=8, expand=True
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("PEND.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700),
+                            ft.Text(str(total_conforme), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        bgcolor=ft.Colors.RED_50, padding=10, border_radius=8, expand=True
+                    ),
+                    ft.Container(
+                        content=ft.Column([
+                            ft.Text("EXIST.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700),
+                            ft.Text(str(total_existente), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700)
+                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        bgcolor=ft.Colors.ORANGE_50, padding=10, border_radius=8, expand=True
+                    )
+                ], 
+                spacing=6
+            )
+
+            lista_atividades_progresso = ft.ListView(expand=True, spacing=14)
+
+            for ativ, dados_at in sorted(stats_atividade.items()):
+                tot = dados_at["total"]
+                fin = dados_at["finalizado"]
+                pct_ativ = (fin / tot) if tot > 0 else 0
+                
+                item_progresso = ft.Column(
+                    [
+                        ft.Row(
+                            [
+                                ft.Text(ativ, size=13, weight=ft.FontWeight.W_600, color=ft.Colors.GREY_800, expand=True),
+                                ft.Text(f"{fin}/{tot} ({pct_ativ * 100:.0f}%)", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)
+                            ], 
+                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN
+                        ),
+                        # Barra de progresso protegida por um Container
+                        ft.Container(
+                            content=ft.ProgressBar(value=pct_ativ, color=ft.Colors.GREEN_500, bgcolor=ft.Colors.GREY_200),
+                            height=6
+                        )
+                    ], 
+                    spacing=3
+                )
+                lista_atividades_progresso.controls.append(item_progresso)
+
+            page.add(
+                cabecalho,
+                card_progresso_geral,
+                ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                grid_contadores,
+                ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
+                ft.Text("EVOLUÇÃO POR ATIVIDADE", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                lista_atividades_progresso
+            )
+            page.update()
+
+        except Exception as e:
+            # Escudo ativado! Se algo quebrar, mostra a seta e o erro para você ver.
+            page.add(
+                cabecalho,
+                ft.Text("Aviso: Falha ao desenhar o painel. Um dado no Firebase pode estar corrompido.", color=ft.Colors.RED_500, weight=ft.FontWeight.BOLD),
+                ft.Text(f"Log: {str(e)}", color=ft.Colors.GREY_600, size=10)
+            )
+            page.update()
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO MÚLTIPLO 
+    # TELA 6: LANÇAMENTO MÚLTIPLO
     # ==========================================
     def abrir_tela_lancamento_lote(obra):
         page.controls.clear()
@@ -833,7 +856,6 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        # Linha de botões atualizada contendo os 3 atalhos de gestão lado a lado
         botoes_acao_obra = ft.Row([
             ft.Container(
                 content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=18), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=12)], alignment=ft.MainAxisAlignment.CENTER),
