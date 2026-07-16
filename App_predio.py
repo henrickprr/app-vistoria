@@ -311,14 +311,14 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 6: LANÇAMENTO DE ATUALIZAR STATUS (QUADRADINHOS POR ANDAR)
+    # TELA 6: LANÇAMENTO DE STATUS RÁPIDO (QUADRADINHOS POR ANDAR)
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.controls.clear()
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
-            ft.Text("Atualizar Status", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+            ft.Text("Status Rápido", size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
@@ -1004,7 +1004,7 @@ def main(page: ft.Page):
             ], spacing=8),
             ft.Row([
                 ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Atualizar Status", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Status Rápido", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
                     bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_status(obra), expand=True
                 ),
                 ft.Container(
