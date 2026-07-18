@@ -10,17 +10,22 @@ from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
 
-# ==========================================
-# COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
-# ==========================================
-ACTIVE_SESSIONS = {}
-
 def main(page: ft.Page):
     page.title = "App de Vistoria"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
     page.window.width = 420  
     page.window.height = 750
+
+    # ==========================================
+    # COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
+    # Variável local imune a atualizações do Flet
+    # ==========================================
+    estado_sessao = {
+        "usuario": None,
+        "perfil": None,
+        "nome": None
+    }
 
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
@@ -104,7 +109,7 @@ def main(page: ft.Page):
         if "historico" not in banco_dados:
             banco_dados["historico"] = []
             
-        usuario_atual = ACTIVE_SESSIONS.get(page.session_id, {}).get("usuario") or "Sistema"
+        usuario_atual = estado_sessao.get("usuario") or "Sistema"
         hora_atual = time.strftime("%d/%m/%Y %H:%M")
         
         registro = {
@@ -837,7 +842,7 @@ def main(page: ft.Page):
         page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
         
-        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
+        perfil_user = estado_sessao.get("perfil")
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_apartamentos(obra, andar)),
@@ -949,7 +954,7 @@ def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
-        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
+        perfil_user = estado_sessao.get("perfil")
 
         cabecalho = ft.Row([ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)), ft.Text(f"{andar}º Pavimento", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)])
         grid_aptos = ft.GridView(expand=True, runs_count=3, max_extent=110, child_aspect_ratio=1.0, spacing=15, run_spacing=15)
@@ -1031,7 +1036,7 @@ def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
-        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
+        perfil_user = estado_sessao.get("perfil")
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
@@ -1118,7 +1123,6 @@ def main(page: ft.Page):
                 controls=botoes_menu, runs_count=3, max_extent=100, child_aspect_ratio=1.0, spacing=15, run_spacing=15
             )
 
-            # Usamos o TRANPARENT para que a grade "flutue" na tela
             dlg_menu = ft.AlertDialog(
                 content=ft.Container(content=grade, width=320, padding=10),
                 bgcolor=ft.Colors.TRANSPARENT, elevation=0, content_padding=0
@@ -1127,7 +1131,6 @@ def main(page: ft.Page):
             dlg_menu.open = True
             page.update()
 
-        # Adiciona o Floating Action Button à página
         page.floating_action_button = ft.FloatingActionButton(
             icon=ft.Icons.APPS,
             bgcolor=ft.Colors.WHITE,
@@ -1359,12 +1362,13 @@ def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
-        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
-        nome_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("nome")
+        perfil_user = estado_sessao.get("perfil")
+        nome_user = estado_sessao.get("nome")
 
         def fazer_logout(e):
-            if page.session_id in ACTIVE_SESSIONS:
-                del ACTIVE_SESSIONS[page.session_id]
+            estado_sessao["usuario"] = None
+            estado_sessao["perfil"] = None
+            estado_sessao["nome"] = None
             abrir_tela_login()
 
         cabecalho_obras = ft.Row([
@@ -1445,11 +1449,9 @@ def main(page: ft.Page):
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                ACTIVE_SESSIONS[page.session_id] = {
-                    "usuario": usr,
-                    "perfil": dados_usr["perfil"],
-                    "nome": dados_usr["nome"]
-                }
+                estado_sessao["usuario"] = usr
+                estado_sessao["perfil"] = dados_usr["perfil"]
+                estado_sessao["nome"] = dados_usr["nome"]
                 
                 abrir_tela_obras()
             else:
@@ -1475,7 +1477,8 @@ def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    if page.session_id in ACTIVE_SESSIONS:
+    # Inicia obrigatoriamente na tela de Login para segurança máxima
+    if estado_sessao["usuario"]:
         abrir_tela_obras()
     else:
         abrir_tela_login()
