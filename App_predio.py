@@ -57,21 +57,33 @@ def main(page: ft.Page):
         except Exception as e:
             pass
 
-    # MOTOR DE MIGRAÇÃO: Protege os dados antigos e cria a gaveta de utilizadores
+    # MOTOR DE MIGRAÇÃO: Protege dados antigos, cria usuários e cria gaveta de histórico
     banco_dados = carregar_do_firebase()
     if not isinstance(banco_dados, dict):
-        banco_dados = {"obras": {}, "usuarios": {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}}
+        banco_dados = {
+            "obras": {}, 
+            "usuarios": {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}},
+            "historico": []
+        }
         salvar_no_firebase(banco_dados, mostrar_snack=False)
     else:
-        # Se for a estrutura velha, migramos automaticamente sem perder nada!
+        precisa_migrar = False
         if "obras" not in banco_dados and "usuarios" not in banco_dados:
             banco_dados = {
                 "obras": banco_dados, 
-                "usuarios": {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}
+                "usuarios": {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}},
+                "historico": []
             }
-            salvar_no_firebase(banco_dados, mostrar_snack=False)
-        elif "usuarios" not in banco_dados:
-            banco_dados["usuarios"] = {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}
+            precisa_migrar = True
+        else:
+            if "usuarios" not in banco_dados:
+                banco_dados["usuarios"] = {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}
+                precisa_migrar = True
+            if "historico" not in banco_dados:
+                banco_dados["historico"] = []
+                precisa_migrar = True
+                
+        if precisa_migrar:
             salvar_no_firebase(banco_dados, mostrar_snack=False)
 
     def get_cor_status(status):
@@ -80,6 +92,28 @@ def main(page: ft.Page):
         if status == "Em Andamento": return ft.Colors.BLUE_500
         if status == "Existente": return ft.Colors.ORANGE_500
         return ft.Colors.GREY_400
+
+    # ==========================================
+    # MOTOR DE HISTÓRICO DE AUDITORIA
+    # ==========================================
+    def registrar_historico(acao, detalhes):
+        if "historico" not in banco_dados:
+            banco_dados["historico"] = []
+            
+        usuario_atual = page.session.store.get("usuario") or "Sistema"
+        hora_atual = time.strftime("%d/%m/%Y %H:%M")
+        
+        registro = {
+            "data": hora_atual,
+            "user": usuario_atual,
+            "acao": acao,
+            "detalhes": detalhes
+        }
+        
+        # Insere no topo da lista e mantém apenas os últimos 300 registos para não pesar a base de dados
+        banco_dados["historico"].insert(0, registro)
+        if len(banco_dados["historico"]) > 300:
+            banco_dados["historico"] = banco_dados["historico"][:300]
 
 
     # ==========================================
@@ -425,6 +459,9 @@ def main(page: ft.Page):
                     else:
                         banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
             
+            # GERA O HISTÓRICO ANTES DE SALVAR
+            registrar_historico("Status em Lote", f"[{obra}] - Aplicou '{status_escolhido}' na ativ. '{tarefa}' em {len(aptos_selecionados)} locais do {andar_alvo}º andar.")
+            
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
             snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso!"), bgcolor=ft.Colors.GREEN_700)
@@ -530,6 +567,9 @@ def main(page: ft.Page):
                     if tarefa not in banco_dados["obras"][obra][andar_alvo][apto]:
                         banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
             
+            # GERA O HISTÓRICO
+            registrar_historico("Criou Tarefa Lote", f"[{obra}] - Injetou '{tarefa}' em {len(andares_selecionados)} andares.")
+            
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
             snack = ft.SnackBar(ft.Text(f"✅ Tarefa '{tarefa}' adicionada em {len(andares_selecionados)} andares!"), bgcolor=ft.Colors.PURPLE_700)
@@ -615,6 +655,9 @@ def main(page: ft.Page):
                 for apto in list(banco_dados["obras"][obra][andar_alvo].keys()):
                     if tarefa in banco_dados["obras"][obra][andar_alvo][apto]:
                         del banco_dados["obras"][obra][andar_alvo][apto][tarefa]
+            
+            # GERA O HISTÓRICO
+            registrar_historico("Removeu Tarefa Lote", f"[{obra}] - Apagou '{tarefa}' de {len(andares_selecionados)} andares.")
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
@@ -800,6 +843,10 @@ def main(page: ft.Page):
         def confirmar_exclusao_ativ(nome_servico):
             def deletar(e):
                 del banco_dados["obras"][obra][andar][apto][nome_servico]
+                
+                # GERA O HISTÓRICO
+                registrar_historico("Excluiu Atividade", f"[{obra}] - Apagou '{nome_servico}' no {andar}º > {apto}.")
+                
                 salvar_no_firebase(banco_dados) 
                 dlg.open = False
                 desenhar_botoes_atividades()
@@ -818,7 +865,6 @@ def main(page: ft.Page):
             for nome_servico, dados in list(banco_dados["obras"][obra][andar][apto].items()):
                 cor_botao = get_cor_status(dados["status"])
                 
-                # Visualizadores não podem clicar para editar
                 if perfil_user == "visualizador":
                     botao_atividade = ft.Container(
                         content=ft.Text(nome_servico, size=14, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
@@ -854,9 +900,14 @@ def main(page: ft.Page):
             menu_dropdown.on_change = ao_mudar_dropdown
 
             def salvar_popup(e):
+                # GERA O HISTÓRICO se o status ou a obs mudar
+                if dados_atuais["status"] != menu_dropdown.value or dados_atuais["obs"] != campo_obs.value:
+                    registrar_historico("Editou Status", f"[{obra}] - {andar}º Andar > {apto} > {nome_servico} agora é '{menu_dropdown.value}'.")
+                
                 banco_dados["obras"][obra][andar][apto][nome_servico]["status"] = menu_dropdown.value
                 banco_dados["obras"][obra][andar][apto][nome_servico]["obs"] = campo_obs.value
                 salvar_no_firebase(banco_dados) 
+                
                 janela_popup.open = False
                 desenhar_botoes_atividades()
                 page.update()
@@ -871,12 +922,16 @@ def main(page: ft.Page):
             nova_ativ = campo_nova.value.strip().replace(".", "") 
             if nova_ativ and nova_ativ not in banco_dados["obras"][obra][andar][apto]:
                 banco_dados["obras"][obra][andar][apto][nova_ativ] = {"status": "Não Iniciado", "obs": ""}
+                
+                # GERA O HISTÓRICO
+                registrar_historico("Nova Ativ. Individual", f"[{obra}] - Criou '{nova_ativ}' no {andar}º > {apto}.")
+                
                 salvar_no_firebase(banco_dados) 
                 campo_nova.value = ""
                 desenhar_botoes_atividades()
         
         linha_add = ft.Row([campo_nova, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_atividade)])
-        linha_add.visible = (perfil_user in ["admin", "editor"]) # Bloqueio de visualizador
+        linha_add.visible = (perfil_user in ["admin", "editor"]) 
         
         page.add(cabecalho, area_rolagem, ft.Divider(), linha_add)
         desenhar_botoes_atividades()
@@ -984,7 +1039,6 @@ def main(page: ft.Page):
                         servicos_disponiveis.add(serv)
             
             opcoes = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
-            
             menu_relatorio = ft.Dropdown(options=opcoes, label="Escolha a Atividade", width=250)
             
             def gerar(e):
@@ -1030,9 +1084,7 @@ def main(page: ft.Page):
             )
         ], spacing=8)
 
-        # Oculta ferramentas de edição para Visualizadores
         linha_botoes_inferior.visible = (perfil_user in ["admin", "editor"])
-        
         botoes_acao_obra = ft.Column([linha_botoes_superior, linha_botoes_inferior], spacing=8)
 
         lista_andares = ft.ListView(expand=True, spacing=10)
@@ -1083,6 +1135,49 @@ def main(page: ft.Page):
 
         page.add(cabecalho, botoes_acao_obra, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
         desenhar_lista_andares()
+
+
+    # ==========================================
+    # TELA DE HISTÓRICO DE AUDITORIA (ADMIN / EDITOR)
+    # ==========================================
+    def abrir_tela_historico():
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
+            ft.Text("Histórico de Ações", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+        ])
+
+        lista_hist = ft.ListView(expand=True, spacing=10)
+        historico_dados = banco_dados.get("historico", [])
+
+        if not historico_dados:
+            lista_hist.controls.append(ft.Text("Nenhum registro encontrado.", color=ft.Colors.GREY_500))
+        else:
+            for item in historico_dados:
+                cor_acao = ft.Colors.BLUE_700
+                if "Excluiu" in item["acao"] or "Removeu" in item["acao"]:
+                    cor_acao = ft.Colors.RED_700
+                elif "Criou" in item["acao"] or "Nova" in item["acao"]:
+                    cor_acao = ft.Colors.PURPLE_700
+                elif "Status" in item["acao"] or "Editou" in item["acao"]:
+                    cor_acao = ft.Colors.ORANGE_700
+
+                card = ft.Container(
+                    content=ft.Column([
+                        ft.Row([
+                            ft.Text(f"{item['data']} - {item['user'].upper()}", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                            ft.Text(item['acao'], size=11, weight=ft.FontWeight.BOLD, color=cor_acao),
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Text(item['detalhes'], size=13, color=ft.Colors.BLACK87)
+                    ]),
+                    bgcolor=ft.Colors.GREY_100, padding=12, border_radius=8
+                )
+                lista_hist.controls.append(card)
+
+        page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_hist)
+        page.update()
 
 
     # ==========================================
@@ -1183,11 +1278,13 @@ def main(page: ft.Page):
         perfil_user = page.session.store.get("perfil")
         nome_user = page.session.store.get("nome")
 
+        # ATUALIZAÇÃO AQUI: O botão de Histórico agora está visível para admin e editor
         cabecalho_obras = ft.Row([
             ft.Column([
                 ft.Text(f"Olá, {nome_user}", size=14, color=ft.Colors.GREY_600),
                 ft.Text("Minhas Obras", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800)
             ], expand=True),
+            ft.IconButton(icon=ft.Icons.HISTORY, icon_color=ft.Colors.BLUE_700, icon_size=30, on_click=lambda _: abrir_tela_historico(), visible=(perfil_user in ["admin", "editor"])),
             ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, icon_color=ft.Colors.BLUE_700, icon_size=30, on_click=lambda _: abrir_tela_usuarios(), visible=(perfil_user == "admin"))
         ])
 
@@ -1234,7 +1331,7 @@ def main(page: ft.Page):
                 desenhar_lista_obras()
                 
         linha_add = ft.Row([campo_nova_obra, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_obra)])
-        linha_add.visible = (perfil_user == "admin") # Só o Admin pode cadastrar prédio novo
+        linha_add.visible = (perfil_user == "admin") 
 
         page.add(cabecalho_obras, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add)
         desenhar_lista_obras()
@@ -1258,7 +1355,6 @@ def main(page: ft.Page):
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                # Salva o crachá do utilizador na memória temporária do aplicativo
                 page.session.store.set("usuario", usr)
                 page.session.store.set("perfil", dados_usr["perfil"])
                 page.session.store.set("nome", dados_usr["nome"])
@@ -1287,7 +1383,6 @@ def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    # O APLICATIVO AGORA COMEÇA SEMPRE PELO LOGIN
     abrir_tela_login()
 
 
