@@ -24,7 +24,7 @@ def main(page: ft.Page):
     ]
 
     # ==========================================
-    # FUNÇÕES DE SINCRONIZAÇÃO COM A NUVEM
+    # FUNÇÕES DE SINCRONIZAÇÃO E MIGRAÇÃO
     # ==========================================
     def carregar_do_firebase():
         try:
@@ -57,28 +57,21 @@ def main(page: ft.Page):
         except Exception as e:
             pass
 
+    # MOTOR DE MIGRAÇÃO: Protege os dados antigos e cria a gaveta de utilizadores
     banco_dados = carregar_do_firebase()
     if not isinstance(banco_dados, dict):
-        banco_dados = {"Golden Flat": {}, "Residência Alvorada": {}}
-
-    if "Golden Flat" in banco_dados:
-        precisa_salvar = False
-        for andar in range(1, 18):
-            andar_str = str(andar)
-            if andar_str not in banco_dados["Golden Flat"]:
-                banco_dados["Golden Flat"][andar_str] = {}
-                precisa_salvar = True
-            
-            locais_iniciais = [f"{andar}{apto:02d}" for apto in range(1, 15)] + ["Corredor"]
-            
-            for local in locais_iniciais:
-                if local not in banco_dados["Golden Flat"][andar_str]:
-                    banco_dados["Golden Flat"][andar_str][local] = {
-                        s: {"status": "Não Iniciado", "obs": ""} for s in lista_servicos_base
-                    }
-                    precisa_salvar = True
-        
-        if precisa_salvar: 
+        banco_dados = {"obras": {}, "usuarios": {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}}
+        salvar_no_firebase(banco_dados, mostrar_snack=False)
+    else:
+        # Se for a estrutura velha, migramos automaticamente sem perder nada!
+        if "obras" not in banco_dados and "usuarios" not in banco_dados:
+            banco_dados = {
+                "obras": banco_dados, 
+                "usuarios": {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}
+            }
+            salvar_no_firebase(banco_dados, mostrar_snack=False)
+        elif "usuarios" not in banco_dados:
+            banco_dados["usuarios"] = {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}
             salvar_no_firebase(banco_dados, mostrar_snack=False)
 
     def get_cor_status(status):
@@ -141,8 +134,8 @@ def main(page: ft.Page):
             locais = [f"{andar}{apto:02d}" for apto in range(1, 15)] + ["Corredor"]
             for i, local in enumerate(locais):
                 status = "Não Iniciado"
-                if local in banco_dados[obra][andar] and servico_escolhido in banco_dados[obra][andar][local]:
-                    status = banco_dados[obra][andar][local][servico_escolhido]["status"]
+                if local in banco_dados["obras"][obra][andar] and servico_escolhido in banco_dados["obras"][obra][andar][local]:
+                    status = banco_dados["obras"][obra][andar][local][servico_escolhido]["status"]
 
                 if status == "Finalizado": pdf.set_fill_color(76, 175, 80)
                 elif status == "Não Conforme": pdf.set_fill_color(244, 67, 54)
@@ -165,6 +158,7 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_dashboard(obra):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
@@ -180,8 +174,8 @@ def main(page: ft.Page):
 
             stats_atividade = {}
 
-            if obra in banco_dados:
-                for andar, apartamentos in banco_dados[obra].items():
+            if obra in banco_dados["obras"]:
+                for andar, apartamentos in banco_dados["obras"][obra].items():
                     if isinstance(apartamentos, dict):  
                         for apto, atividades in apartamentos.items():
                             if isinstance(atividades, dict):  
@@ -316,6 +310,7 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
@@ -323,7 +318,7 @@ def main(page: ft.Page):
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
-        for and_dados in banco_dados[obra].values():
+        for and_dados in banco_dados["obras"][obra].values():
             for ap_dados in and_dados.values():
                 for s in ap_dados.keys():
                     servicos_disponiveis.add(s)
@@ -344,7 +339,7 @@ def main(page: ft.Page):
             expand=True
         )
 
-        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
         andar_inicial = andares_ordenados[0] if andares_ordenados else None
         
         opcoes_andares = [ft.dropdown.Option(key=str(a), text=f"{a}º Pavimento") for a in andares_ordenados]
@@ -359,14 +354,14 @@ def main(page: ft.Page):
             if not andar_alvo: return
             
             tarefa_atual = dropdown_tarefa.value
-            aptos_do_andar = sorted(banco_dados[obra][andar_alvo].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+            aptos_do_andar = sorted(banco_dados["obras"][obra][andar_alvo].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
             
             for apto in aptos_do_andar:
                 is_selected = apto in aptos_selecionados
                 
                 cor_fundo = ft.Colors.GREY_300
-                if tarefa_atual and tarefa_atual in banco_dados[obra][andar_alvo][apto]:
-                    st = banco_dados[obra][andar_alvo][apto][tarefa_atual]["status"]
+                if tarefa_atual and tarefa_atual in banco_dados["obras"][obra][andar_alvo][apto]:
+                    st = banco_dados["obras"][obra][andar_alvo][apto][tarefa_atual]["status"]
                     cor_fundo = get_cor_status(st)
                 
                 icone = ft.Icons.CHECK_CIRCLE if is_selected else None
@@ -424,11 +419,11 @@ def main(page: ft.Page):
             status_escolhido = dropdown_status.value
             
             for apt_sel in aptos_selecionados:
-                if andar_alvo in banco_dados[obra] and apt_sel in banco_dados[obra][andar_alvo]:
-                    if tarefa not in banco_dados[obra][andar_alvo][apt_sel]:
-                        banco_dados[obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
+                if andar_alvo in banco_dados["obras"][obra] and apt_sel in banco_dados["obras"][obra][andar_alvo]:
+                    if tarefa not in banco_dados["obras"][obra][andar_alvo][apt_sel]:
+                        banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
                     else:
-                        banco_dados[obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
+                        banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
@@ -461,6 +456,7 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_lancamento_tarefas(obra):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
@@ -468,7 +464,7 @@ def main(page: ft.Page):
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
-        for and_dados in banco_dados[obra].values():
+        for and_dados in banco_dados["obras"][obra].values():
             for ap_dados in and_dados.values():
                 for s in ap_dados.keys():
                     servicos_disponiveis.add(s)
@@ -495,7 +491,7 @@ def main(page: ft.Page):
         btn_nova_tarefa = ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=40, on_click=popup_nova_tarefa)
         linha_tarefa = ft.Row([dropdown_tarefa, btn_nova_tarefa])
 
-        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
         checkboxes_andares = {}
         grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.5, spacing=4, run_spacing=4)
@@ -530,9 +526,9 @@ def main(page: ft.Page):
                 return
             
             for andar_alvo in andares_selecionados:
-                for apto in banco_dados[obra][andar_alvo].keys():
-                    if tarefa not in banco_dados[obra][andar_alvo][apto]:
-                        banco_dados[obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
+                for apto in banco_dados["obras"][obra][andar_alvo].keys():
+                    if tarefa not in banco_dados["obras"][obra][andar_alvo][apto]:
+                        banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
@@ -565,14 +561,15 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_remover_tarefas(obra):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
-            ft.Text("Remover de Vários Andares", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+            ft.Text("Remover Tarefas", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
-        for and_dados in banco_dados[obra].values():
+        for and_dados in banco_dados["obras"][obra].values():
             for ap_dados in and_dados.values():
                 for s in ap_dados.keys():
                     servicos_disponiveis.add(s)
@@ -580,7 +577,7 @@ def main(page: ft.Page):
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
         dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade a Excluir", options=opcoes_tarefas, expand=True)
 
-        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
         checkboxes_andares = {}
         grid_andares = ft.GridView(expand=True, runs_count=2, child_aspect_ratio=4.5, spacing=4, run_spacing=4)
@@ -608,16 +605,16 @@ def main(page: ft.Page):
             
             andares_selecionados = [andar for andar, cb in checkboxes_andares.items() if cb.value]
             if not andares_selecionados:
-                snack = ft.SnackBar(ft.Text("Marque pelo menos um Andar nas checkboxes!"), bgcolor=ft.Colors.RED_700)
+                snack = ft.SnackBar(ft.Text("Marque pelo menos um Andar!"), bgcolor=ft.Colors.RED_700)
                 page.overlay.append(snack)
                 snack.open = True
                 page.update()
                 return
             
             for andar_alvo in andares_selecionados:
-                for apto in list(banco_dados[obra][andar_alvo].keys()):
-                    if tarefa in banco_dados[obra][andar_alvo][apto]:
-                        del banco_dados[obra][andar_alvo][apto][tarefa]
+                for apto in list(banco_dados["obras"][obra][andar_alvo].keys()):
+                    if tarefa in banco_dados["obras"][obra][andar_alvo][apto]:
+                        del banco_dados["obras"][obra][andar_alvo][apto][tarefa]
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
@@ -650,13 +647,14 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_relatorio(obra, servico_escolhido):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
             ft.Text(f"Relatório: {servico_escolhido}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
         ])
 
-        andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
         bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
 
@@ -766,8 +764,8 @@ def main(page: ft.Page):
             
             for local_str in locais_matriz:
                 status_atual = "Não Iniciado" 
-                if local_str in banco_dados[obra][andar] and servico_escolhido in banco_dados[obra][andar][local_str]:
-                    status_atual = banco_dados[obra][andar][local_str][servico_escolhido]["status"]
+                if local_str in banco_dados["obras"][obra][andar] and servico_escolhido in banco_dados["obras"][obra][andar][local_str]:
+                    status_atual = banco_dados["obras"][obra][andar][local_str][servico_escolhido]["status"]
                 
                 cor_quadrado = get_cor_status(status_atual)
                 largura_celula = 45 if local_str == "Corredor" else 35
@@ -787,7 +785,9 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_atividades(obra, andar, apto):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
+        perfil_user = page.session.get("perfil")
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_apartamentos(obra, andar)),
@@ -799,7 +799,7 @@ def main(page: ft.Page):
 
         def confirmar_exclusao_ativ(nome_servico):
             def deletar(e):
-                del banco_dados[obra][andar][apto][nome_servico]
+                del banco_dados["obras"][obra][andar][apto][nome_servico]
                 salvar_no_firebase(banco_dados) 
                 dlg.open = False
                 desenhar_botoes_atividades()
@@ -815,18 +815,26 @@ def main(page: ft.Page):
 
         def desenhar_botoes_atividades():
             container_botoes.controls.clear()
-            for nome_servico, dados in list(banco_dados[obra][andar][apto].items()):
+            for nome_servico, dados in list(banco_dados["obras"][obra][andar][apto].items()):
                 cor_botao = get_cor_status(dados["status"])
-                botao_atividade = ft.Container(
-                    content=ft.Text(nome_servico, size=14, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
-                    bgcolor=cor_botao, padding=12, border_radius=20, ink=True,
-                    on_click=lambda e, s=nome_servico: abrir_popup_status(s), on_long_press=lambda e, s=nome_servico: confirmar_exclusao_ativ(s) 
-                )
+                
+                # Visualizadores não podem clicar para editar
+                if perfil_user == "visualizador":
+                    botao_atividade = ft.Container(
+                        content=ft.Text(nome_servico, size=14, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                        bgcolor=cor_botao, padding=12, border_radius=20
+                    )
+                else:
+                    botao_atividade = ft.Container(
+                        content=ft.Text(nome_servico, size=14, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE),
+                        bgcolor=cor_botao, padding=12, border_radius=20, ink=True,
+                        on_click=lambda e, s=nome_servico: abrir_popup_status(s), on_long_press=lambda e, s=nome_servico: confirmar_exclusao_ativ(s) 
+                    )
                 container_botoes.controls.append(botao_atividade)
             page.update()
 
         def abrir_popup_status(nome_servico):
-            dados_atuais = banco_dados[obra][andar][apto][nome_servico]
+            dados_atuais = banco_dados["obras"][obra][andar][apto][nome_servico]
             menu_dropdown = ft.Dropdown(
                 options=[
                     ft.dropdown.Option("Não Iniciado"), 
@@ -846,8 +854,8 @@ def main(page: ft.Page):
             menu_dropdown.on_change = ao_mudar_dropdown
 
             def salvar_popup(e):
-                banco_dados[obra][andar][apto][nome_servico]["status"] = menu_dropdown.value
-                banco_dados[obra][andar][apto][nome_servico]["obs"] = campo_obs.value
+                banco_dados["obras"][obra][andar][apto][nome_servico]["status"] = menu_dropdown.value
+                banco_dados["obras"][obra][andar][apto][nome_servico]["obs"] = campo_obs.value
                 salvar_no_firebase(banco_dados) 
                 janela_popup.open = False
                 desenhar_botoes_atividades()
@@ -861,12 +869,14 @@ def main(page: ft.Page):
         campo_nova = ft.TextField(label="Nova Atividade", expand=True, height=50)
         def add_nova_atividade(e):
             nova_ativ = campo_nova.value.strip().replace(".", "") 
-            if nova_ativ and nova_ativ not in banco_dados[obra][andar][apto]:
-                banco_dados[obra][andar][apto][nova_ativ] = {"status": "Não Iniciado", "obs": ""}
+            if nova_ativ and nova_ativ not in banco_dados["obras"][obra][andar][apto]:
+                banco_dados["obras"][obra][andar][apto][nova_ativ] = {"status": "Não Iniciado", "obs": ""}
                 salvar_no_firebase(banco_dados) 
                 campo_nova.value = ""
                 desenhar_botoes_atividades()
+        
         linha_add = ft.Row([campo_nova, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_atividade)])
+        linha_add.visible = (perfil_user in ["admin", "editor"]) # Bloqueio de visualizador
         
         page.add(cabecalho, area_rolagem, ft.Divider(), linha_add)
         desenhar_botoes_atividades()
@@ -877,12 +887,15 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_apartamentos(obra, andar):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        perfil_user = page.session.get("perfil")
+
         cabecalho = ft.Row([ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)), ft.Text(f"{andar}º Pavimento", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)])
         grid_aptos = ft.GridView(expand=True, runs_count=3, max_extent=110, child_aspect_ratio=1.0, spacing=15, run_spacing=15)
 
         def confirmar_exclusao_apto(apto_nome):
             def deletar(e):
-                del banco_dados[obra][andar][apto_nome]
+                del banco_dados["obras"][obra][andar][apto_nome]
                 salvar_no_firebase(banco_dados) 
                 dlg.open = False
                 desenhar_grid()
@@ -898,7 +911,7 @@ def main(page: ft.Page):
 
         def desenhar_grid():
             grid_aptos.controls.clear()
-            aptos_ordenados = sorted(banco_dados[obra][andar].items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 9999)
+            aptos_ordenados = sorted(banco_dados["obras"][obra][andar].items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 9999)
             
             for numero_apto, atividades in aptos_ordenados:
                 cor_fundo = ft.Colors.GREY_400 
@@ -929,7 +942,7 @@ def main(page: ft.Page):
                     border_radius=10, 
                     ink=True, 
                     on_click=lambda e, o=obra, a=andar, apt=numero_apto: abrir_tela_atividades(o, a, apt), 
-                    on_long_press=lambda e, apt=numero_apto: confirmar_exclusao_apto(apt)
+                    on_long_press=(lambda e, apt=numero_apto: confirmar_exclusao_apto(apt)) if perfil_user == "admin" else None
                 )
                 grid_aptos.controls.append(bloco)
             page.update()
@@ -937,22 +950,26 @@ def main(page: ft.Page):
         campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50)
         def add_novo_apto(e):
             novo_apto = campo_novo_apto.value.strip().replace(".", "")
-            if novo_apto and novo_apto not in banco_dados[obra][andar]:
-                banco_dados[obra][andar][novo_apto] = {s: {"status": "Não Iniciado", "obs": ""} for s in lista_servicos_base}
+            if novo_apto and novo_apto not in banco_dados["obras"][obra][andar]:
+                banco_dados["obras"][obra][andar][novo_apto] = {s: {"status": "Não Iniciado", "obs": ""} for s in lista_servicos_base}
                 salvar_no_firebase(banco_dados) 
                 campo_novo_apto.value = ""
                 desenhar_grid()
+                
         linha_add = ft.Row([campo_novo_apto, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_apto)])
+        linha_add.visible = (perfil_user in ["admin", "editor"])
         
         page.add(cabecalho, grid_aptos, ft.Divider(), linha_add)
         desenhar_grid()
 
 
     # ==========================================
-    # TELA 2: NAVEGAÇÃO DE ANDARES (PAINEL GERAL)
+    # TELA 2: NAVEGAÇÃO DE ANDARES E MENUS
     # ==========================================
     def abrir_tela_andares(obra):
         page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        perfil_user = page.session.get("perfil")
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
@@ -961,7 +978,7 @@ def main(page: ft.Page):
         
         def iniciar_relatorio(e):
             servicos_disponiveis = set(lista_servicos_base)
-            for andar_dados in banco_dados[obra].values():
+            for andar_dados in banco_dados["obras"][obra].values():
                 for apto_dados in andar_dados.values():
                     for serv in apto_dados.keys():
                         servicos_disponiveis.add(serv)
@@ -987,38 +1004,42 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        botoes_acao_obra = ft.Column([
-            ft.Row([
-                ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=16), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio, expand=True
-                ),
-                ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.BAR_CHART, color=ft.Colors.WHITE, size=16), ft.Text("Painel", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.TEAL_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_dashboard(obra), expand=True
-                )
-            ], spacing=8),
-            ft.Row([
-                ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Status Rápido", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_status(obra), expand=True
-                ),
-                ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE, size=16), ft.Text("+ Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.PURPLE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_tarefas(obra), expand=True
-                ),
-                ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.DELETE_SWEEP, color=ft.Colors.WHITE, size=16), ft.Text("- Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
-                    bgcolor=ft.Colors.RED_800, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_remover_tarefas(obra), expand=True
-                )
-            ], spacing=8)
+        linha_botoes_superior = ft.Row([
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.GRID_ON, color=ft.Colors.WHITE, size=16), ft.Text("Relatório", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.BLUE_800, padding=12, border_radius=8, ink=True, on_click=iniciar_relatorio, expand=True
+            ),
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.BAR_CHART, color=ft.Colors.WHITE, size=16), ft.Text("Painel", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.TEAL_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_dashboard(obra), expand=True
+            )
         ], spacing=8)
+        
+        linha_botoes_inferior = ft.Row([
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.CHECKLIST, color=ft.Colors.WHITE, size=16), ft.Text("Status Rápido", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.ORANGE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_status(obra), expand=True
+            ),
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.LIBRARY_ADD, color=ft.Colors.WHITE, size=16), ft.Text("+ Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.PURPLE_700, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_lancamento_tarefas(obra), expand=True
+            ),
+            ft.Container(
+                content=ft.Row([ft.Icon(ft.Icons.DELETE_SWEEP, color=ft.Colors.WHITE, size=16), ft.Text("- Tarefa", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE, size=11)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.RED_800, padding=12, border_radius=8, ink=True, on_click=lambda _: abrir_tela_remover_tarefas(obra), expand=True
+            )
+        ], spacing=8)
+
+        # Oculta ferramentas de edição para Visualizadores
+        linha_botoes_inferior.visible = (perfil_user in ["admin", "editor"])
+        
+        botoes_acao_obra = ft.Column([linha_botoes_superior, linha_botoes_inferior], spacing=8)
 
         lista_andares = ft.ListView(expand=True, spacing=10)
 
         def confirmar_exclusao_andar(andar_nome):
             def deletar(e):
-                del banco_dados[obra][andar_nome]
+                del banco_dados["obras"][obra][andar_nome]
                 salvar_no_firebase(banco_dados) 
                 dlg.open = False
                 desenhar_lista_andares()
@@ -1034,7 +1055,7 @@ def main(page: ft.Page):
 
         def desenhar_lista_andares():
             lista_andares.controls.clear()
-            andares_ordenados = sorted(banco_dados[obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+            andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
             for andar in andares_ordenados:
                 botao_andar = ft.Container(
                     content=ft.Row([ft.Text(f"{andar}º Pavimento", size=18, weight=ft.FontWeight.W_600, color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER), 
@@ -1043,7 +1064,7 @@ def main(page: ft.Page):
                     border_radius=8, 
                     ink=True, 
                     on_click=lambda e, o=obra, a=andar: abrir_tela_apartamentos(o, a), 
-                    on_long_press=lambda e, a=andar: confirmar_exclusao_andar(a)
+                    on_long_press=(lambda e, a=andar: confirmar_exclusao_andar(a)) if perfil_user == "admin" else None
                 )
                 lista_andares.controls.append(botao_andar)
             page.update()
@@ -1051,15 +1072,106 @@ def main(page: ft.Page):
         campo_novo_andar = ft.TextField(label="Novo Andar", expand=True, height=50)
         def add_novo_andar(e):
             novo_andar = campo_novo_andar.value.strip().replace(".", "")
-            if novo_andar and novo_andar not in banco_dados[obra]:
-                banco_dados[obra][novo_andar] = {}
+            if novo_andar and novo_andar not in banco_dados["obras"][obra]:
+                banco_dados["obras"][obra][novo_andar] = {}
                 salvar_no_firebase(banco_dados) 
                 campo_novo_andar.value = ""
                 desenhar_lista_andares()
+                
         linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
+        linha_add.visible = (perfil_user in ["admin", "editor"])
 
         page.add(cabecalho, botoes_acao_obra, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
         desenhar_lista_andares()
+
+
+    # ==========================================
+    # TELA DE GESTÃO DE USUÁRIOS (SÓ ADMIN)
+    # ==========================================
+    def abrir_tela_usuarios():
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
+            ft.Text("Gestão de Usuários", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+        ])
+
+        lista_users = ft.ListView(expand=True, spacing=10)
+
+        def confirmar_exclusao_user(username):
+            def deletar(e):
+                if username == "admin":
+                    snack = ft.SnackBar(ft.Text("Não é possível apagar o Administrador Principal!"), bgcolor=ft.Colors.RED_700)
+                    page.overlay.append(snack)
+                    snack.open = True
+                else:
+                    del banco_dados["usuarios"][username]
+                    salvar_no_firebase(banco_dados)
+                    desenhar_lista_usuarios()
+                dlg.open = False
+                page.update()
+                
+            dlg = ft.AlertDialog(title=ft.Text("Apagar Usuário"), content=ft.Text(f"Deseja remover o acesso de '{username}'?"), actions=[ft.TextButton("Cancelar", on_click=lambda e: fechar_dlg(dlg)), ft.TextButton("Excluir", on_click=deletar, style=ft.ButtonStyle(color=ft.Colors.RED))])
+            page.overlay.append(dlg)
+            dlg.open = True
+            page.update()
+
+        def fechar_dlg(dlg):
+            dlg.open = False
+            page.update()
+
+        def desenhar_lista_usuarios():
+            lista_users.controls.clear()
+            for user, info in banco_dados["usuarios"].items():
+                cor_icone = ft.Colors.RED if info["perfil"] == "admin" else (ft.Colors.BLUE if info["perfil"] == "editor" else ft.Colors.GREEN)
+                icone = ft.Icons.ADMIN_PANEL_SETTINGS if info["perfil"] == "admin" else (ft.Icons.ENGINEERING if info["perfil"] == "editor" else ft.Icons.VISIBILITY)
+                
+                card_user = ft.Container(
+                    content=ft.Row([
+                        ft.Icon(icone, color=cor_icone),
+                        ft.Column([
+                            ft.Text(info["nome"], weight=ft.FontWeight.BOLD, size=15),
+                            ft.Text(f"Login: {user} | Senha: {info['senha']}", size=11, color=ft.Colors.GREY_600)
+                        ], expand=True),
+                        ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_300, on_click=lambda e, u=user: confirmar_exclusao_user(u))
+                    ]),
+                    bgcolor=ft.Colors.GREY_100, padding=10, border_radius=8
+                )
+                lista_users.controls.append(card_user)
+            page.update()
+
+        campo_novo_login = ft.TextField(label="Novo Login (ex: joao)", expand=True)
+        campo_novo_nome = ft.TextField(label="Nome Completo", expand=True)
+        campo_nova_senha = ft.TextField(label="Senha", expand=True)
+        dropdown_perfil = ft.Dropdown(
+            options=[ft.dropdown.Option("admin"), ft.dropdown.Option("editor"), ft.dropdown.Option("visualizador")],
+            value="visualizador", width=120
+        )
+
+        def add_novo_usuario(e):
+            user = campo_novo_login.value.strip().replace(".", "").lower()
+            if user and user not in banco_dados["usuarios"]:
+                banco_dados["usuarios"][user] = {
+                    "senha": campo_nova_senha.value.strip(),
+                    "nome": campo_novo_nome.value.strip() or user,
+                    "perfil": dropdown_perfil.value
+                }
+                salvar_no_firebase(banco_dados)
+                campo_novo_login.value = ""
+                campo_novo_nome.value = ""
+                campo_nova_senha.value = ""
+                desenhar_lista_usuarios()
+
+        area_cadastro = ft.Column([
+            ft.Text("Cadastrar Novo Acesso", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800),
+            campo_novo_nome,
+            ft.Row([campo_novo_login, campo_nova_senha]),
+            ft.Row([dropdown_perfil, ft.ElevatedButton("Gravar", on_click=add_novo_usuario, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE, expand=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        ], spacing=10)
+
+        page.add(cabecalho, lista_users, ft.Divider(), area_cadastro)
+        desenhar_lista_usuarios()
 
 
     # ==========================================
@@ -1067,12 +1179,23 @@ def main(page: ft.Page):
     # ==========================================
     def abrir_tela_obras():
         page.controls.clear()
-        titulo = ft.Text("Minhas Obras", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800)
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        perfil_user = page.session.get("perfil")
+        nome_user = page.session.get("nome")
+
+        cabecalho_obras = ft.Row([
+            ft.Column([
+                ft.Text(f"Olá, {nome_user}", size=14, color=ft.Colors.GREY_600),
+                ft.Text("Minhas Obras", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800)
+            ], expand=True),
+            ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, icon_color=ft.Colors.BLUE_700, icon_size=30, on_click=lambda _: abrir_tela_usuarios(), visible=(perfil_user == "admin"))
+        ])
+
         lista_obras = ft.ListView(expand=True, spacing=15)
 
         def confirmar_exclusao_obra(obra_nome):
             def deletar(e):
-                del banco_dados[obra_nome]
+                del banco_dados["obras"][obra_nome]
                 salvar_no_firebase(banco_dados) 
                 dlg.open = False
                 desenhar_lista_obras()
@@ -1088,7 +1211,7 @@ def main(page: ft.Page):
 
         def desenhar_lista_obras():
             lista_obras.controls.clear()
-            for obra in sorted(banco_dados.keys()):
+            for obra in sorted(banco_dados["obras"].keys()):
                 botao_obra = ft.Container(
                     content=ft.Row([ft.Icon(ft.Icons.DOMAIN, color=ft.Colors.WHITE, size=28), ft.Text(obra, size=20, weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, spacing=15), 
                     height=80, 
@@ -1096,7 +1219,7 @@ def main(page: ft.Page):
                     border_radius=12, 
                     ink=True, 
                     on_click=lambda e, o=obra: abrir_tela_andares(o), 
-                    on_long_press=lambda e, o=obra: confirmar_exclusao_obra(o)
+                    on_long_press=(lambda e, o=obra: confirmar_exclusao_obra(o)) if perfil_user == "admin" else None
                 )
                 lista_obras.controls.append(botao_obra)
             page.update()
@@ -1104,17 +1227,68 @@ def main(page: ft.Page):
         campo_nova_obra = ft.TextField(label="Cadastrar Nova Obra", expand=True, height=50)
         def add_nova_obra(e):
             nova_obra = campo_nova_obra.value.strip().replace(".", "")
-            if nova_obra and nova_obra not in banco_dados:
-                banco_dados[nova_obra] = {}
+            if nova_obra and nova_obra not in banco_dados["obras"]:
+                banco_dados["obras"][nova_obra] = {}
                 salvar_no_firebase(banco_dados) 
                 campo_nova_obra.value = ""
                 desenhar_lista_obras()
+                
         linha_add = ft.Row([campo_nova_obra, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_obra)])
+        linha_add.visible = (perfil_user == "admin") # Só o Admin pode cadastrar prédio novo
 
-        page.add(titulo, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add)
+        page.add(cabecalho_obras, ft.Divider(color=ft.Colors.TRANSPARENT), lista_obras, linha_add)
         desenhar_lista_obras()
 
-    abrir_tela_obras()
+
+    # ==========================================
+    # TELA 0: O PORTÃO DE ENTRADA (LOGIN)
+    # ==========================================
+    def abrir_tela_login():
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.CENTER
+        page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
+        
+        campo_usuario = ft.TextField(label="Usuário (Login)", prefix_icon=ft.Icons.PERSON)
+        campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True)
+        
+        def validar_login(e):
+            usr = campo_usuario.value.strip().lower()
+            pwd = campo_senha.value.strip()
+            
+            if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
+                dados_usr = banco_dados["usuarios"][usr]
+                
+                # Salva o crachá do utilizador na memória temporária do aplicativo
+                page.session.set("usuario", usr)
+                page.session.set("perfil", dados_usr["perfil"])
+                page.session.set("nome", dados_usr["nome"])
+                
+                abrir_tela_obras()
+            else:
+                snack = ft.SnackBar(ft.Text("Acesso Negado: Usuário ou senha incorretos!"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack)
+                snack.open = True
+                page.update()
+
+        btn_entrar = ft.ElevatedButton("ENTRAR NO SISTEMA", on_click=validar_login, width=250, height=50, style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE))
+        
+        caixa_login = ft.Container(
+            content=ft.Column([
+                ft.Icon(ft.Icons.APARTMENT, size=60, color=ft.Colors.BLUE_700),
+                ft.Text("App Vistoria", size=24, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900),
+                ft.Divider(color=ft.Colors.TRANSPARENT),
+                campo_usuario,
+                campo_senha,
+                ft.Divider(color=ft.Colors.TRANSPARENT),
+                btn_entrar
+            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            padding=30, border_radius=15, bgcolor=ft.Colors.GREY_100, width=320
+        )
+        
+        page.add(caixa_login)
+
+    # O APLICATIVO AGORA COMEÇA SEMPRE PELO LOGIN
+    abrir_tela_login()
 
 
 os.makedirs("assets", exist_ok=True)
