@@ -57,7 +57,6 @@ def main(page: ft.Page):
         except Exception as e:
             pass
 
-    # MOTOR DE MIGRAÇÃO: Protege dados antigos, cria usuários e cria gaveta de histórico
     banco_dados = carregar_do_firebase()
     if not isinstance(banco_dados, dict):
         banco_dados = {
@@ -100,7 +99,8 @@ def main(page: ft.Page):
         if "historico" not in banco_dados:
             banco_dados["historico"] = []
             
-        usuario_atual = page.session.store.get("usuario") or "Sistema"
+        # AGORA PUXA DA MEMÓRIA PERSISTENTE
+        usuario_atual = page.client_storage.get("usuario") or "Sistema"
         hora_atual = time.strftime("%d/%m/%Y %H:%M")
         
         registro = {
@@ -110,7 +110,6 @@ def main(page: ft.Page):
             "detalhes": detalhes
         }
         
-        # Insere no topo da lista e mantém apenas os últimos 300 registos para não pesar a base de dados
         banco_dados["historico"].insert(0, registro)
         if len(banco_dados["historico"]) > 300:
             banco_dados["historico"] = banco_dados["historico"][:300]
@@ -459,7 +458,6 @@ def main(page: ft.Page):
                     else:
                         banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
             
-            # GERA O HISTÓRICO ANTES DE SALVAR
             registrar_historico("Status em Lote", f"[{obra}] - Aplicou '{status_escolhido}' na ativ. '{tarefa}' em {len(aptos_selecionados)} locais do {andar_alvo}º andar.")
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
@@ -567,7 +565,6 @@ def main(page: ft.Page):
                     if tarefa not in banco_dados["obras"][obra][andar_alvo][apto]:
                         banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
             
-            # GERA O HISTÓRICO
             registrar_historico("Criou Tarefa Lote", f"[{obra}] - Injetou '{tarefa}' em {len(andares_selecionados)} andares.")
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
@@ -656,7 +653,6 @@ def main(page: ft.Page):
                     if tarefa in banco_dados["obras"][obra][andar_alvo][apto]:
                         del banco_dados["obras"][obra][andar_alvo][apto][tarefa]
             
-            # GERA O HISTÓRICO
             registrar_historico("Removeu Tarefa Lote", f"[{obra}] - Apagou '{tarefa}' de {len(andares_selecionados)} andares.")
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
@@ -830,7 +826,7 @@ def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
-        perfil_user = page.session.store.get("perfil")
+        perfil_user = page.client_storage.get("perfil")
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_apartamentos(obra, andar)),
@@ -844,7 +840,6 @@ def main(page: ft.Page):
             def deletar(e):
                 del banco_dados["obras"][obra][andar][apto][nome_servico]
                 
-                # GERA O HISTÓRICO
                 registrar_historico("Excluiu Atividade", f"[{obra}] - Apagou '{nome_servico}' no {andar}º > {apto}.")
                 
                 salvar_no_firebase(banco_dados) 
@@ -900,7 +895,6 @@ def main(page: ft.Page):
             menu_dropdown.on_change = ao_mudar_dropdown
 
             def salvar_popup(e):
-                # GERA O HISTÓRICO se o status ou a obs mudar
                 if dados_atuais["status"] != menu_dropdown.value or dados_atuais["obs"] != campo_obs.value:
                     registrar_historico("Editou Status", f"[{obra}] - {andar}º Andar > {apto} > {nome_servico} agora é '{menu_dropdown.value}'.")
                 
@@ -923,7 +917,6 @@ def main(page: ft.Page):
             if nova_ativ and nova_ativ not in banco_dados["obras"][obra][andar][apto]:
                 banco_dados["obras"][obra][andar][apto][nova_ativ] = {"status": "Não Iniciado", "obs": ""}
                 
-                # GERA O HISTÓRICO
                 registrar_historico("Nova Ativ. Individual", f"[{obra}] - Criou '{nova_ativ}' no {andar}º > {apto}.")
                 
                 salvar_no_firebase(banco_dados) 
@@ -943,7 +936,7 @@ def main(page: ft.Page):
     def abrir_tela_apartamentos(obra, andar):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.store.get("perfil")
+        perfil_user = page.client_storage.get("perfil")
 
         cabecalho = ft.Row([ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)), ft.Text(f"{andar}º Pavimento", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)])
         grid_aptos = ft.GridView(expand=True, runs_count=3, max_extent=110, child_aspect_ratio=1.0, spacing=15, run_spacing=15)
@@ -1024,7 +1017,7 @@ def main(page: ft.Page):
     def abrir_tela_andares(obra):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.store.get("perfil")
+        perfil_user = page.client_storage.get("perfil")
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
@@ -1275,17 +1268,24 @@ def main(page: ft.Page):
     def abrir_tela_obras():
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.store.get("perfil")
-        nome_user = page.session.store.get("nome")
+        perfil_user = page.client_storage.get("perfil")
+        nome_user = page.client_storage.get("nome")
 
-        # ATUALIZAÇÃO AQUI: O botão de Histórico agora está visível para admin e editor
+        def fazer_logout(e):
+            page.client_storage.remove("usuario")
+            page.client_storage.remove("perfil")
+            page.client_storage.remove("nome")
+            abrir_tela_login()
+
+        # Botão Vermelho de Logout adicionado
         cabecalho_obras = ft.Row([
             ft.Column([
                 ft.Text(f"Olá, {nome_user}", size=14, color=ft.Colors.GREY_600),
                 ft.Text("Minhas Obras", size=26, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800)
             ], expand=True),
-            ft.IconButton(icon=ft.Icons.HISTORY, icon_color=ft.Colors.BLUE_700, icon_size=30, on_click=lambda _: abrir_tela_historico(), visible=(perfil_user in ["admin", "editor"])),
-            ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, icon_color=ft.Colors.BLUE_700, icon_size=30, on_click=lambda _: abrir_tela_usuarios(), visible=(perfil_user == "admin"))
+            ft.IconButton(icon=ft.Icons.HISTORY, icon_color=ft.Colors.BLUE_700, icon_size=28, on_click=lambda _: abrir_tela_historico(), visible=(perfil_user in ["admin", "editor"])),
+            ft.IconButton(icon=ft.Icons.MANAGE_ACCOUNTS, icon_color=ft.Colors.BLUE_700, icon_size=28, on_click=lambda _: abrir_tela_usuarios(), visible=(perfil_user == "admin")),
+            ft.IconButton(icon=ft.Icons.LOGOUT, icon_color=ft.Colors.RED_600, icon_size=28, on_click=fazer_logout, tooltip="Sair da Conta")
         ])
 
         lista_obras = ft.ListView(expand=True, spacing=15)
@@ -1355,9 +1355,10 @@ def main(page: ft.Page):
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                page.session.store.set("usuario", usr)
-                page.session.store.set("perfil", dados_usr["perfil"])
-                page.session.store.set("nome", dados_usr["nome"])
+                # GRAVAÇÃO PERSISTENTE: O navegador memoriza as credenciais
+                page.client_storage.set("usuario", usr)
+                page.client_storage.set("perfil", dados_usr["perfil"])
+                page.client_storage.set("nome", dados_usr["nome"])
                 
                 abrir_tela_obras()
             else:
@@ -1383,7 +1384,11 @@ def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    abrir_tela_login()
+    # LÓGICA DE BOOT: Se o crachá já estiver salvo no telemóvel, ignora o Login!
+    if page.client_storage.get("usuario"):
+        abrir_tela_obras()
+    else:
+        abrir_tela_login()
 
 
 os.makedirs("assets", exist_ok=True)
