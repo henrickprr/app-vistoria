@@ -17,6 +17,10 @@ async def main(page: ft.Page):
     page.window.width = 420  
     page.window.height = 750
 
+    pref = ft.SharedPreferences()
+    page.overlay.append(pref)
+    page.update()
+
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
         "Limpeza", "Forro de gesso", "Forro da varanda", 
@@ -1186,6 +1190,38 @@ async def main(page: ft.Page):
 
         lista_users = ft.ListView(expand=True, spacing=10)
 
+        # LÓGICA DE EDIÇÃO DE UTILIZADOR
+        def abrir_popup_editar(username):
+            info_atual = banco_dados["usuarios"][username]
+            
+            edit_nome = ft.TextField(label="Nome Completo", value=info_atual["nome"])
+            edit_senha = ft.TextField(label="Nova Senha", value=info_atual["senha"])
+            edit_perfil = ft.Dropdown(
+                options=[ft.dropdown.Option("admin"), ft.dropdown.Option("editor"), ft.dropdown.Option("visualizador")],
+                value=info_atual["perfil"]
+            )
+
+            def salvar_edicao(e):
+                banco_dados["usuarios"][username]["nome"] = edit_nome.value.strip()
+                banco_dados["usuarios"][username]["senha"] = edit_senha.value.strip()
+                banco_dados["usuarios"][username]["perfil"] = edit_perfil.value
+                salvar_no_firebase(banco_dados)
+                dlg_edit.open = False
+                desenhar_lista_usuarios()
+                page.update()
+
+            dlg_edit = ft.AlertDialog(
+                title=ft.Text(f"Editar Usuário: {username}"),
+                content=ft.Column([edit_nome, edit_senha, edit_perfil], tight=True),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda e: fechar_dlg(dlg_edit)),
+                    ft.TextButton("Salvar", on_click=salvar_edicao, style=ft.ButtonStyle(color=ft.Colors.BLUE_700))
+                ]
+            )
+            page.overlay.append(dlg_edit)
+            dlg_edit.open = True
+            page.update()
+
         def confirmar_exclusao_user(username):
             def deletar(e):
                 if username == "admin":
@@ -1221,7 +1257,8 @@ async def main(page: ft.Page):
                             ft.Text(info["nome"], weight=ft.FontWeight.BOLD, size=15),
                             ft.Text(f"Login: {user} | Senha: {info['senha']}", size=11, color=ft.Colors.GREY_600)
                         ], expand=True),
-                        ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_300, on_click=lambda e, u=user: confirmar_exclusao_user(u))
+                        ft.IconButton(ft.Icons.EDIT, icon_color=ft.Colors.BLUE_500, tooltip="Editar", on_click=lambda e, u=user: abrir_popup_editar(u)),
+                        ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_300, tooltip="Apagar", on_click=lambda e, u=user: confirmar_exclusao_user(u))
                     ]),
                     bgcolor=ft.Colors.GREY_100, padding=10, border_radius=8
                 )
@@ -1271,11 +1308,10 @@ async def main(page: ft.Page):
         perfil_user = page.session.store.get("perfil")
         nome_user = page.session.store.get("nome")
 
-        # LOGOUT: Remove a memória do telemóvel e limpa a sessão
         async def fazer_logout(e):
             page.session.store.clear()
             try:
-                await page.shared_preferences.clear()
+                await pref.clear()
             except Exception:
                 pass
             abrir_tela_login()
@@ -1350,7 +1386,6 @@ async def main(page: ft.Page):
         campo_usuario = ft.TextField(label="Usuário (Login)", prefix_icon=ft.Icons.PERSON)
         campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True)
         
-        # O Flet suporta eventos assíncronos nativamente!
         async def validar_login(e):
             usr = campo_usuario.value.strip().lower()
             pwd = campo_senha.value.strip()
@@ -1358,16 +1393,14 @@ async def main(page: ft.Page):
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                # 1. Salva na Memória de Curto Prazo (Sessão atual)
                 page.session.store.set("usuario", usr)
                 page.session.store.set("perfil", dados_usr["perfil"])
                 page.session.store.set("nome", dados_usr["nome"])
                 
-                # 2. Tenta Salvar no Dispositivo de forma invisível
                 try:
-                    await page.shared_preferences.set("usuario", usr)
-                    await page.shared_preferences.set("perfil", dados_usr["perfil"])
-                    await page.shared_preferences.set("nome", dados_usr["nome"])
+                    await pref.set("usuario", usr)
+                    await pref.set("perfil", dados_usr["perfil"])
+                    await pref.set("nome", dados_usr["nome"])
                 except Exception:
                     pass
                 
@@ -1395,14 +1428,12 @@ async def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    # LÓGICA DE BOOT AUTOMÁTICO (Procura o crachá no telemóvel ao ligar)
     try:
-        salvo_usr = await page.shared_preferences.get("usuario")
+        salvo_usr = await pref.get("usuario")
         if salvo_usr:
-            # Reativa as configurações para a memória rápida
             page.session.store.set("usuario", salvo_usr)
-            page.session.store.set("perfil", await page.shared_preferences.get("perfil"))
-            page.session.store.set("nome", await page.shared_preferences.get("nome"))
+            page.session.store.set("perfil", await pref.get("perfil"))
+            page.session.store.set("nome", await pref.get("nome"))
             abrir_tela_obras()
         else:
             abrir_tela_login()
