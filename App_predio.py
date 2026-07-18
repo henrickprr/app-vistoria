@@ -10,12 +10,18 @@ from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
 
-def main(page: ft.Page):
+# A função main agora é assíncrona para podermos acionar a memória do dispositivo
+async def main(page: ft.Page):
     page.title = "App de Vistoria"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
     page.window.width = 420  
     page.window.height = 750
+
+    # Inicializa o novo motor de armazenamento persistente do Flet 0.86+
+    pref = ft.SharedPreferences()
+    page.overlay.append(pref)
+    page.update()
 
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
@@ -99,8 +105,7 @@ def main(page: ft.Page):
         if "historico" not in banco_dados:
             banco_dados["historico"] = []
             
-        # AGORA PUXA DA MEMÓRIA PERSISTENTE
-        usuario_atual = page.client_storage.get("usuario") or "Sistema"
+        usuario_atual = page.session.store.get("usuario") or "Sistema"
         hora_atual = time.strftime("%d/%m/%Y %H:%M")
         
         registro = {
@@ -826,7 +831,7 @@ def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
-        perfil_user = page.client_storage.get("perfil")
+        perfil_user = page.session.store.get("perfil")
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_apartamentos(obra, andar)),
@@ -936,7 +941,7 @@ def main(page: ft.Page):
     def abrir_tela_apartamentos(obra, andar):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.client_storage.get("perfil")
+        perfil_user = page.session.store.get("perfil")
 
         cabecalho = ft.Row([ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)), ft.Text(f"{andar}º Pavimento", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)])
         grid_aptos = ft.GridView(expand=True, runs_count=3, max_extent=110, child_aspect_ratio=1.0, spacing=15, run_spacing=15)
@@ -1017,7 +1022,7 @@ def main(page: ft.Page):
     def abrir_tela_andares(obra):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.client_storage.get("perfil")
+        perfil_user = page.session.store.get("perfil")
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
@@ -1268,16 +1273,20 @@ def main(page: ft.Page):
     def abrir_tela_obras():
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.client_storage.get("perfil")
-        nome_user = page.client_storage.get("nome")
+        
+        # AQUI USAMOS A MEMÓRIA RÁPIDA (SÍNCRONA)
+        perfil_user = page.session.store.get("perfil")
+        nome_user = page.session.store.get("nome")
 
-        def fazer_logout(e):
-            page.client_storage.remove("usuario")
-            page.client_storage.remove("perfil")
-            page.client_storage.remove("nome")
+        # LOGOUT (LIMPA O DISCO E A SESSÃO)
+        async def fazer_logout(e):
+            page.session.store.clear()
+            try:
+                await pref.clear()
+            except Exception:
+                pass
             abrir_tela_login()
 
-        # Botão Vermelho de Logout adicionado
         cabecalho_obras = ft.Row([
             ft.Column([
                 ft.Text(f"Olá, {nome_user}", size=14, color=ft.Colors.GREY_600),
@@ -1348,17 +1357,26 @@ def main(page: ft.Page):
         campo_usuario = ft.TextField(label="Usuário (Login)", prefix_icon=ft.Icons.PERSON)
         campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True)
         
-        def validar_login(e):
+        # VALIDAÇÃO ASSÍNCRONA PARA SALVAR NO DISCO DO DISPOSITIVO
+        async def validar_login(e):
             usr = campo_usuario.value.strip().lower()
             pwd = campo_senha.value.strip()
             
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                # GRAVAÇÃO PERSISTENTE: O navegador memoriza as credenciais
-                page.client_storage.set("usuario", usr)
-                page.client_storage.set("perfil", dados_usr["perfil"])
-                page.client_storage.set("nome", dados_usr["nome"])
+                # 1. Salva na Memória Rápida (para uso durante o dia)
+                page.session.store.set("usuario", usr)
+                page.session.store.set("perfil", dados_usr["perfil"])
+                page.session.store.set("nome", dados_usr["nome"])
+                
+                # 2. Salva na Memória de Longo Prazo do Dispositivo
+                try:
+                    await pref.set("usuario", usr)
+                    await pref.set("perfil", dados_usr["perfil"])
+                    await pref.set("nome", dados_usr["nome"])
+                except Exception:
+                    pass
                 
                 abrir_tela_obras()
             else:
@@ -1384,10 +1402,18 @@ def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    # LÓGICA DE BOOT: Se o crachá já estiver salvo no telemóvel, ignora o Login!
-    if page.client_storage.get("usuario"):
-        abrir_tela_obras()
-    else:
+    # LÓGICA DE BOOT ASSÍNCRONA: Procura o crachá escondido no navegador do telemóvel
+    try:
+        salvo_usr = await pref.get("usuario")
+        if salvo_usr:
+            # Recupera as informações para a memória rápida
+            page.session.store.set("usuario", salvo_usr)
+            page.session.store.set("perfil", await pref.get("perfil"))
+            page.session.store.set("nome", await pref.get("nome"))
+            abrir_tela_obras()
+        else:
+            abrir_tela_login()
+    except Exception:
         abrir_tela_login()
 
 
