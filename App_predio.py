@@ -10,18 +10,12 @@ from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
 
-# A função main agora é assíncrona para podermos acionar a memória do dispositivo
 async def main(page: ft.Page):
     page.title = "App de Vistoria"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
     page.window.width = 420  
     page.window.height = 750
-
-    # Inicializa o novo motor de armazenamento persistente do Flet 0.86+
-    pref = ft.SharedPreferences()
-    page.overlay.append(pref)
-    page.update()
 
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
@@ -1274,15 +1268,14 @@ async def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
-        # AQUI USAMOS A MEMÓRIA RÁPIDA (SÍNCRONA)
         perfil_user = page.session.store.get("perfil")
         nome_user = page.session.store.get("nome")
 
-        # LOGOUT (LIMPA O DISCO E A SESSÃO)
+        # LOGOUT: Remove a memória do telemóvel e limpa a sessão
         async def fazer_logout(e):
             page.session.store.clear()
             try:
-                await pref.clear()
+                await page.shared_preferences.clear()
             except Exception:
                 pass
             abrir_tela_login()
@@ -1357,7 +1350,7 @@ async def main(page: ft.Page):
         campo_usuario = ft.TextField(label="Usuário (Login)", prefix_icon=ft.Icons.PERSON)
         campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True)
         
-        # VALIDAÇÃO ASSÍNCRONA PARA SALVAR NO DISCO DO DISPOSITIVO
+        # O Flet suporta eventos assíncronos nativamente!
         async def validar_login(e):
             usr = campo_usuario.value.strip().lower()
             pwd = campo_senha.value.strip()
@@ -1365,16 +1358,16 @@ async def main(page: ft.Page):
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                # 1. Salva na Memória Rápida (para uso durante o dia)
+                # 1. Salva na Memória de Curto Prazo (Sessão atual)
                 page.session.store.set("usuario", usr)
                 page.session.store.set("perfil", dados_usr["perfil"])
                 page.session.store.set("nome", dados_usr["nome"])
                 
-                # 2. Salva na Memória de Longo Prazo do Dispositivo
+                # 2. Tenta Salvar no Dispositivo de forma invisível
                 try:
-                    await pref.set("usuario", usr)
-                    await pref.set("perfil", dados_usr["perfil"])
-                    await pref.set("nome", dados_usr["nome"])
+                    await page.shared_preferences.set("usuario", usr)
+                    await page.shared_preferences.set("perfil", dados_usr["perfil"])
+                    await page.shared_preferences.set("nome", dados_usr["nome"])
                 except Exception:
                     pass
                 
@@ -1402,14 +1395,14 @@ async def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    # LÓGICA DE BOOT ASSÍNCRONA: Procura o crachá escondido no navegador do telemóvel
+    # LÓGICA DE BOOT AUTOMÁTICO (Procura o crachá no telemóvel ao ligar)
     try:
-        salvo_usr = await pref.get("usuario")
+        salvo_usr = await page.shared_preferences.get("usuario")
         if salvo_usr:
-            # Recupera as informações para a memória rápida
+            # Reativa as configurações para a memória rápida
             page.session.store.set("usuario", salvo_usr)
-            page.session.store.set("perfil", await pref.get("perfil"))
-            page.session.store.set("nome", await pref.get("nome"))
+            page.session.store.set("perfil", await page.shared_preferences.get("perfil"))
+            page.session.store.set("nome", await page.shared_preferences.get("nome"))
             abrir_tela_obras()
         else:
             abrir_tela_login()
