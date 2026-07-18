@@ -1295,4 +1295,4 @@ os.makedirs("assets", exist_ok=True)
 porta = int(os.environ.get("PORT", 8000))
 
 if __name__ == "__main__":
-    ft.run(target=main, port=porta, host="0.0.0.0", assets_dir="assets")
+    ft.run(main, port=porta, host="0.0.0.0", assets_dir="assets")
