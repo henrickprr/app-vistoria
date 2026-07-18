@@ -10,16 +10,18 @@ from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
 
-async def main(page: ft.Page):
+# ==========================================
+# COFRE DE SESSÕES (BLINDADO CONTRA O FLET)
+# ==========================================
+# Este dicionário Python gere os logins de forma independente e 100% segura
+ACTIVE_SESSIONS = {}
+
+def main(page: ft.Page):
     page.title = "App de Vistoria"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
     page.window.width = 420  
     page.window.height = 750
-
-    pref = ft.SharedPreferences()
-    page.overlay.append(pref)
-    page.update()
 
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
@@ -103,7 +105,7 @@ async def main(page: ft.Page):
         if "historico" not in banco_dados:
             banco_dados["historico"] = []
             
-        usuario_atual = page.session.store.get("usuario") or "Sistema"
+        usuario_atual = ACTIVE_SESSIONS.get(page.session_id, {}).get("usuario") or "Sistema"
         hora_atual = time.strftime("%d/%m/%Y %H:%M")
         
         registro = {
@@ -829,7 +831,8 @@ async def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
-        perfil_user = page.session.store.get("perfil")
+        
+        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_apartamentos(obra, andar)),
@@ -939,7 +942,8 @@ async def main(page: ft.Page):
     def abrir_tela_apartamentos(obra, andar):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.store.get("perfil")
+        
+        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
 
         cabecalho = ft.Row([ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)), ft.Text(f"{andar}º Pavimento", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)])
         grid_aptos = ft.GridView(expand=True, runs_count=3, max_extent=110, child_aspect_ratio=1.0, spacing=15, run_spacing=15)
@@ -1020,7 +1024,8 @@ async def main(page: ft.Page):
     def abrir_tela_andares(obra):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.store.get("perfil")
+        
+        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
@@ -1305,15 +1310,12 @@ async def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
-        perfil_user = page.session.store.get("perfil")
-        nome_user = page.session.store.get("nome")
+        perfil_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("perfil")
+        nome_user = ACTIVE_SESSIONS.get(page.session_id, {}).get("nome")
 
-        async def fazer_logout(e):
-            page.session.store.clear()
-            try:
-                await pref.clear()
-            except Exception:
-                pass
+        def fazer_logout(e):
+            if page.session_id in ACTIVE_SESSIONS:
+                del ACTIVE_SESSIONS[page.session_id]
             abrir_tela_login()
 
         cabecalho_obras = ft.Row([
@@ -1386,23 +1388,19 @@ async def main(page: ft.Page):
         campo_usuario = ft.TextField(label="Usuário (Login)", prefix_icon=ft.Icons.PERSON)
         campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True)
         
-        async def validar_login(e):
+        def validar_login(e):
             usr = campo_usuario.value.strip().lower()
             pwd = campo_senha.value.strip()
             
             if usr in banco_dados["usuarios"] and banco_dados["usuarios"][usr]["senha"] == pwd:
                 dados_usr = banco_dados["usuarios"][usr]
                 
-                page.session.store.set("usuario", usr)
-                page.session.store.set("perfil", dados_usr["perfil"])
-                page.session.store.set("nome", dados_usr["nome"])
-                
-                try:
-                    await pref.set("usuario", usr)
-                    await pref.set("perfil", dados_usr["perfil"])
-                    await pref.set("nome", dados_usr["nome"])
-                except Exception:
-                    pass
+                # Guarda a sessão de forma segura usando Python Puro
+                ACTIVE_SESSIONS[page.session_id] = {
+                    "usuario": usr,
+                    "perfil": dados_usr["perfil"],
+                    "nome": dados_usr["nome"]
+                }
                 
                 abrir_tela_obras()
             else:
@@ -1428,16 +1426,10 @@ async def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    try:
-        salvo_usr = await pref.get("usuario")
-        if salvo_usr:
-            page.session.store.set("usuario", salvo_usr)
-            page.session.store.set("perfil", await pref.get("perfil"))
-            page.session.store.set("nome", await pref.get("nome"))
-            abrir_tela_obras()
-        else:
-            abrir_tela_login()
-    except Exception:
+    # Verifica se a aba já estava logada no cofre do Python
+    if page.session_id in ACTIVE_SESSIONS:
+        abrir_tela_obras()
+    else:
         abrir_tela_login()
 
 
