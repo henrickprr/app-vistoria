@@ -787,7 +787,7 @@ def main(page: ft.Page):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
-        perfil_user = page.session.get("perfil")
+        perfil_user = page.session.store.get("perfil")
 
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_apartamentos(obra, andar)),
@@ -888,7 +888,7 @@ def main(page: ft.Page):
     def abrir_tela_apartamentos(obra, andar):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.get("perfil")
+        perfil_user = page.session.store.get("perfil")
 
         cabecalho = ft.Row([ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)), ft.Text(f"{andar}º Pavimento", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)])
         grid_aptos = ft.GridView(expand=True, runs_count=3, max_extent=110, child_aspect_ratio=1.0, spacing=15, run_spacing=15)
@@ -969,7 +969,7 @@ def main(page: ft.Page):
     def abrir_tela_andares(obra):
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.get("perfil")
+        perfil_user = page.session.store.get("perfil")
         
         cabecalho = ft.Row([
             ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
@@ -1180,8 +1180,8 @@ def main(page: ft.Page):
     def abrir_tela_obras():
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
-        perfil_user = page.session.get("perfil")
-        nome_user = page.session.get("nome")
+        perfil_user = page.session.store.get("perfil")
+        nome_user = page.session.store.get("nome")
 
         cabecalho_obras = ft.Row([
             ft.Column([
@@ -1259,9 +1259,9 @@ def main(page: ft.Page):
                 dados_usr = banco_dados["usuarios"][usr]
                 
                 # Salva o crachá do utilizador na memória temporária do aplicativo
-                page.session.set("usuario", usr)
-                page.session.set("perfil", dados_usr["perfil"])
-                page.session.set("nome", dados_usr["nome"])
+                page.session.store.set("usuario", usr)
+                page.session.store.set("perfil", dados_usr["perfil"])
+                page.session.store.set("nome", dados_usr["nome"])
                 
                 abrir_tela_obras()
             else:
