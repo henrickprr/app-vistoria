@@ -10,22 +10,21 @@ from fpdf.enums import XPos, YPos
 
 FIREBASE_URL = "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json"
 
+# ==========================================
+# COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
+# ==========================================
+estado_sessao = {
+    "usuario": None,
+    "perfil": None,
+    "nome": None
+}
+
 def main(page: ft.Page):
     page.title = "App de Vistoria"
     page.theme_mode = ft.ThemeMode.LIGHT
     page.padding = 20
     page.window.width = 420  
     page.window.height = 750
-
-    # ==========================================
-    # COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
-    # Variável local imune a atualizações do Flet
-    # ==========================================
-    estado_sessao = {
-        "usuario": None,
-        "perfil": None,
-        "nome": None
-    }
 
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
@@ -109,7 +108,7 @@ def main(page: ft.Page):
         if "historico" not in banco_dados:
             banco_dados["historico"] = []
             
-        usuario_atual = estado_sessao.get("usuario") or "Sistema"
+        usuario_atual = estado_sessao.get("usuario") or "SISTEMA"
         hora_atual = time.strftime("%d/%m/%Y %H:%M")
         
         registro = {
@@ -352,7 +351,7 @@ def main(page: ft.Page):
     # TELA 6: LANÇAMENTO DE STATUS RÁPIDO 
     # ==========================================
     def abrir_tela_lancamento_status(obra):
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -501,7 +500,7 @@ def main(page: ft.Page):
     # FERRAMENTA B: DISTRIBUIR NOVA TAREFA (CHECKBOXES)
     # ==========================================
     def abrir_tela_lancamento_tarefas(obra):
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -520,7 +519,6 @@ def main(page: ft.Page):
         dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade", options=opcoes_tarefas, expand=True)
 
         def popup_nova_tarefa(e):
-            campo_nova = ft.TextField(label="Digite o Nome da Nova Atividade")
             def add_nova(e):
                 val = campo_nova.value.strip().replace(".", "")
                 if val:
@@ -528,6 +526,8 @@ def main(page: ft.Page):
                     dropdown_tarefa.value = val
                     dlg_nova.open = False
                     page.update()
+                    
+            campo_nova = ft.TextField(label="Digite o Nome da Nova Atividade", on_submit=add_nova)
             dlg_nova = ft.AlertDialog(
                 title=ft.Text("Nova Atividade"), content=campo_nova, actions=[ft.TextButton("Adicionar", on_click=add_nova)]
             )
@@ -609,7 +609,7 @@ def main(page: ft.Page):
     # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE
     # ==========================================
     def abrir_tela_remover_tarefas(obra):
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -698,7 +698,7 @@ def main(page: ft.Page):
     # TELA 5: RELATÓRIO MATRICIAL (App Web)
     # ==========================================
     def abrir_tela_relatorio(obra, servico_escolhido):
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
 
@@ -837,7 +837,7 @@ def main(page: ft.Page):
     # TELA 4: CHECKLIST INDIVIDUAL DO APTO
     # ==========================================
     def abrir_tela_atividades(obra, andar, apto):
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         nome_tela = apto if apto == "Corredor" else f"Apto {apto}"
@@ -927,7 +927,6 @@ def main(page: ft.Page):
             janela_popup.open = True
             page.update()
 
-        campo_nova = ft.TextField(label="Nova Atividade", expand=True, height=50)
         def add_nova_atividade(e):
             nova_ativ = campo_nova.value.strip().replace(".", "") 
             if nova_ativ and nova_ativ not in banco_dados["obras"][obra][andar][apto]:
@@ -938,6 +937,9 @@ def main(page: ft.Page):
                 salvar_no_firebase(banco_dados) 
                 campo_nova.value = ""
                 desenhar_botoes_atividades()
+                
+        # Confirmação pelo botão "Enter" do teclado
+        campo_nova = ft.TextField(label="Nova Atividade", expand=True, height=50, on_submit=add_nova_atividade)
         
         linha_add = ft.Row([campo_nova, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_atividade)])
         linha_add.visible = (perfil_user in ["admin", "editor"]) 
@@ -950,7 +952,7 @@ def main(page: ft.Page):
     # TELA 3: GRID DE APARTAMENTOS DO ANDAR
     # ==========================================
     def abrir_tela_apartamentos(obra, andar):
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -1013,7 +1015,6 @@ def main(page: ft.Page):
                 grid_aptos.controls.append(bloco)
             page.update()
 
-        campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50)
         def add_novo_apto(e):
             novo_apto = campo_novo_apto.value.strip().replace(".", "")
             if novo_apto and novo_apto not in banco_dados["obras"][obra][andar]:
@@ -1022,6 +1023,9 @@ def main(page: ft.Page):
                 campo_novo_apto.value = ""
                 desenhar_grid()
                 
+        # Confirmação pelo botão "Enter" do teclado
+        campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50, on_submit=add_novo_apto)
+        
         linha_add = ft.Row([campo_novo_apto, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_apto)])
         linha_add.visible = (perfil_user in ["admin", "editor"])
         
@@ -1043,7 +1047,6 @@ def main(page: ft.Page):
             ft.Text(f"{obra}", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
         ])
         
-        # LOGICA DO MENU RELATÓRIO MANTIDA
         def iniciar_relatorio():
             servicos_disponiveis = set(lista_servicos_base)
             for andar_dados in banco_dados["obras"][obra].values():
@@ -1075,12 +1078,11 @@ def main(page: ft.Page):
             page.update()
 
         # ==========================================
-        # NOVO: MENU FLUTUANTE (ESTILO SS RESTÔ)
+        # MENU FLUTUANTE (ESTILO SS RESTÔ)
         # ==========================================
         def abrir_menu_flutuante(e):
             botoes_menu = []
 
-            # Truque para fechar o menu antes de abrir a próxima tela
             def acao(func):
                 dlg_menu.open = False
                 page.update()
@@ -1171,7 +1173,6 @@ def main(page: ft.Page):
                 lista_andares.controls.append(botao_andar)
             page.update()
 
-        campo_novo_andar = ft.TextField(label="Novo Andar", expand=True, height=50)
         def add_novo_andar(e):
             novo_andar = campo_novo_andar.value.strip().replace(".", "")
             if novo_andar and novo_andar not in banco_dados["obras"][obra]:
@@ -1180,7 +1181,15 @@ def main(page: ft.Page):
                 campo_novo_andar.value = ""
                 desenhar_lista_andares()
                 
-        linha_add = ft.Row([campo_novo_andar, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar)])
+        # Confirmação pelo botão "Enter" do teclado
+        campo_novo_andar = ft.TextField(label="Novo Andar", expand=True, height=50, on_submit=add_novo_andar)
+        
+        # O ft.Container(width=70) empurra o campo de texto para a esquerda, para o Botão Flutuante não ficar por cima!
+        linha_add = ft.Row([
+            campo_novo_andar, 
+            ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar),
+            ft.Container(width=70) 
+        ])
         linha_add.visible = (perfil_user in ["admin", "editor"])
 
         page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
@@ -1188,10 +1197,10 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA DE HISTÓRICO DE AUDITORIA (ADMIN / EDITOR)
+    # TELA DE HISTÓRICO DE AUDITORIA BLINDADO
     # ==========================================
     def abrir_tela_historico():
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -1207,25 +1216,34 @@ def main(page: ft.Page):
             lista_hist.controls.append(ft.Text("Nenhum registro encontrado.", color=ft.Colors.GREY_500))
         else:
             for item in historico_dados:
-                cor_acao = ft.Colors.BLUE_700
-                if "Excluiu" in item["acao"] or "Removeu" in item["acao"]:
-                    cor_acao = ft.Colors.RED_700
-                elif "Criou" in item["acao"] or "Nova" in item["acao"]:
-                    cor_acao = ft.Colors.PURPLE_700
-                elif "Status" in item["acao"] or "Editou" in item["acao"]:
-                    cor_acao = ft.Colors.ORANGE_700
+                try:
+                    if isinstance(item, dict):
+                        acao_str = str(item.get('acao', 'Ação'))
+                        user_str = str(item.get('user', 'SISTEMA'))
+                        data_str = str(item.get('data', ''))
+                        detalhes_str = str(item.get('detalhes', ''))
 
-                card = ft.Container(
-                    content=ft.Column([
-                        ft.Row([
-                            ft.Text(f"{item['data']} - {item['user'].upper()}", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
-                            ft.Text(item['acao'], size=11, weight=ft.FontWeight.BOLD, color=cor_acao),
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                        ft.Text(item['detalhes'], size=13, color=ft.Colors.BLACK87)
-                    ]),
-                    bgcolor=ft.Colors.GREY_100, padding=12, border_radius=8
-                )
-                lista_hist.controls.append(card)
+                        cor_acao = ft.Colors.BLUE_700
+                        if "Excluiu" in acao_str or "Removeu" in acao_str:
+                            cor_acao = ft.Colors.RED_700
+                        elif "Criou" in acao_str or "Nova" in acao_str:
+                            cor_acao = ft.Colors.PURPLE_700
+                        elif "Status" in acao_str or "Editou" in acao_str:
+                            cor_acao = ft.Colors.ORANGE_700
+
+                        card = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{data_str} - {user_str.upper()}", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                                    ft.Text(acao_str, size=11, weight=ft.FontWeight.BOLD, color=cor_acao),
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(detalhes_str, size=13, color=ft.Colors.BLACK87)
+                            ]),
+                            bgcolor=ft.Colors.GREY_100, padding=12, border_radius=8
+                        )
+                        lista_hist.controls.append(card)
+                except Exception:
+                    pass # Ignora qualquer registo antigo que esteja corrompido
 
         page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_hist)
         page.update()
@@ -1235,7 +1253,7 @@ def main(page: ft.Page):
     # TELA DE GESTÃO DE USUÁRIOS (SÓ ADMIN)
     # ==========================================
     def abrir_tela_usuarios():
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -1246,7 +1264,6 @@ def main(page: ft.Page):
 
         lista_users = ft.ListView(expand=True, spacing=10)
 
-        # LÓGICA DE EDIÇÃO DE UTILIZADOR
         def abrir_popup_editar(username):
             info_atual = banco_dados["usuarios"][username]
             
@@ -1358,7 +1375,7 @@ def main(page: ft.Page):
     # TELA 1: CADASTRO E SELEÇÃO DE OBRAS
     # ==========================================
     def abrir_tela_obras():
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
         
@@ -1414,7 +1431,6 @@ def main(page: ft.Page):
                 lista_obras.controls.append(botao_obra)
             page.update()
 
-        campo_nova_obra = ft.TextField(label="Cadastrar Nova Obra", expand=True, height=50)
         def add_nova_obra(e):
             nova_obra = campo_nova_obra.value.strip().replace(".", "")
             if nova_obra and nova_obra not in banco_dados["obras"]:
@@ -1423,6 +1439,9 @@ def main(page: ft.Page):
                 campo_nova_obra.value = ""
                 desenhar_lista_obras()
                 
+        # Confirmação pelo botão "Enter" do teclado
+        campo_nova_obra = ft.TextField(label="Cadastrar Nova Obra", expand=True, height=50, on_submit=add_nova_obra)
+        
         linha_add = ft.Row([campo_nova_obra, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_obra)])
         linha_add.visible = (perfil_user == "admin") 
 
@@ -1434,13 +1453,12 @@ def main(page: ft.Page):
     # TELA 0: O PORTÃO DE ENTRADA (LOGIN)
     # ==========================================
     def abrir_tela_login():
-        page.floating_action_button = None # Limpa o botão menu
+        page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.CENTER
         page.horizontal_alignment = ft.CrossAxisAlignment.CENTER
         
         campo_usuario = ft.TextField(label="Usuário (Login)", prefix_icon=ft.Icons.PERSON)
-        campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True)
         
         def validar_login(e):
             usr = campo_usuario.value.strip().lower()
@@ -1460,6 +1478,9 @@ def main(page: ft.Page):
                 snack.open = True
                 page.update()
 
+        # O botão enter no teclado também faz login
+        campo_senha = ft.TextField(label="Senha", prefix_icon=ft.Icons.LOCK, password=True, can_reveal_password=True, on_submit=validar_login)
+        
         btn_entrar = ft.ElevatedButton("ENTRAR NO SISTEMA", on_click=validar_login, width=250, height=50, style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE))
         
         caixa_login = ft.Container(
@@ -1477,11 +1498,7 @@ def main(page: ft.Page):
         
         page.add(caixa_login)
 
-    # Inicia obrigatoriamente na tela de Login para segurança máxima
-    if estado_sessao["usuario"]:
-        abrir_tela_obras()
-    else:
-        abrir_tela_login()
+    abrir_tela_login()
 
 
 os.makedirs("assets", exist_ok=True)
