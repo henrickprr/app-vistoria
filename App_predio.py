@@ -87,9 +87,14 @@ def main(page: ft.Page):
             if "usuarios" not in banco_dados:
                 banco_dados["usuarios"] = {"admin": {"senha": "123", "perfil": "admin", "nome": "Admin Principal"}}
                 precisa_migrar = True
+            
             if "historico" not in banco_dados:
                 banco_dados["historico"] = []
                 precisa_migrar = True
+            elif isinstance(banco_dados["historico"], dict):
+                # CORREÇÃO: Transforma o Histórico (que o Firebase converteu em dict) de volta numa lista!
+                chaves_ordenadas = sorted(banco_dados["historico"].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+                banco_dados["historico"] = [banco_dados["historico"][k] for k in chaves_ordenadas]
                 
         if precisa_migrar:
             salvar_no_firebase(banco_dados, mostrar_snack=False)
@@ -105,8 +110,12 @@ def main(page: ft.Page):
     # MOTOR DE HISTÓRICO DE AUDITORIA
     # ==========================================
     def registrar_historico(acao, detalhes):
+        # Proteção dupla: garante que o histórico é sempre tratado como Lista antes de gravar
         if "historico" not in banco_dados:
             banco_dados["historico"] = []
+        elif isinstance(banco_dados["historico"], dict):
+            chaves_ordenadas = sorted(banco_dados["historico"].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+            banco_dados["historico"] = [banco_dados["historico"][k] for k in chaves_ordenadas]
             
         usuario_atual = estado_sessao.get("usuario") or "SISTEMA"
         hora_atual = time.strftime("%d/%m/%Y %H:%M")
@@ -938,7 +947,6 @@ def main(page: ft.Page):
                 campo_nova.value = ""
                 desenhar_botoes_atividades()
                 
-        # Confirmação pelo botão "Enter" do teclado
         campo_nova = ft.TextField(label="Nova Atividade", expand=True, height=50, on_submit=add_nova_atividade)
         
         linha_add = ft.Row([campo_nova, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_nova_atividade)])
@@ -1023,7 +1031,6 @@ def main(page: ft.Page):
                 campo_novo_apto.value = ""
                 desenhar_grid()
                 
-        # Confirmação pelo botão "Enter" do teclado
         campo_novo_apto = ft.TextField(label="Novo Apto/Local", expand=True, height=50, on_submit=add_novo_apto)
         
         linha_add = ft.Row([campo_novo_apto, ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_apto)])
@@ -1181,10 +1188,9 @@ def main(page: ft.Page):
                 campo_novo_andar.value = ""
                 desenhar_lista_andares()
                 
-        # Confirmação pelo botão "Enter" do teclado
         campo_novo_andar = ft.TextField(label="Novo Andar", expand=True, height=50, on_submit=add_novo_andar)
         
-        # O ft.Container(width=70) empurra o campo de texto para a esquerda, para o Botão Flutuante não ficar por cima!
+        # Cria um bloco vazio (width=70) para empurrar o campo para o centro, fugindo do Botão Flutuante
         linha_add = ft.Row([
             campo_novo_andar, 
             ft.IconButton(ft.Icons.ADD_CIRCLE, icon_color=ft.Colors.GREEN_600, icon_size=35, on_click=add_novo_andar),
@@ -1218,6 +1224,7 @@ def main(page: ft.Page):
             for item in historico_dados:
                 try:
                     if isinstance(item, dict):
+                        # Evita erros de dados corrompidos usando conversores seguros
                         acao_str = str(item.get('acao', 'Ação'))
                         user_str = str(item.get('user', 'SISTEMA'))
                         data_str = str(item.get('data', ''))
@@ -1243,7 +1250,7 @@ def main(page: ft.Page):
                         )
                         lista_hist.controls.append(card)
                 except Exception:
-                    pass # Ignora qualquer registo antigo que esteja corrompido
+                    pass
 
         page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_hist)
         page.update()
