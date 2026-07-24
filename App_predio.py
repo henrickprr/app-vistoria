@@ -23,47 +23,10 @@ def main(page: ft.Page):
     page.window.width = 420  
     page.window.height = 750
 
-    # MOTOR DE FOTOGRAFIAS (FilePicker)
-    file_picker = ft.FilePicker()
-    page.overlay.append(file_picker)
-
-    def on_upload_progress(e: ft.FilePickerUploadEvent):
-        if e.progress == 1.0:
-            caminho = os.path.join("assets", e.file_name)
-            if os.path.exists(caminho):
-                with open(caminho, "rb") as f:
-                    b64 = base64.b64encode(f.read()).decode("utf-8")
-                
-                if hasattr(file_picker, "dados_alvo"):
-                    file_picker.dados_alvo["foto"] = b64
-                if hasattr(file_picker, "btn_alvo"):
-                    file_picker.btn_alvo.icon = ft.Icons.CHECK
-                    file_picker.btn_alvo.text = "Foto Anexada"
-                    file_picker.btn_alvo.bgcolor = ft.Colors.GREEN_600
-                page.update()
-                
-                try:
-                    os.remove(caminho) 
-                except: pass
-
-    def on_dialog_result(e: ft.FilePickerResultEvent):
-        if e.files and len(e.files) > 0:
-            file_picker.upload(
-                [
-                    ft.FilePickerUploadFile(
-                        e.files[0].name,
-                        upload_url=page.get_upload_url(e.files[0].name, 60),
-                    )
-                ]
-            )
-
-    file_picker.on_result = on_dialog_result
-    file_picker.on_upload = on_upload_progress
-
     lista_servicos_base = [
         "Revestimento piso banheiro", "Dreno", "Revestimento porcelanato", 
         "Limpeza", "Forro de gesso", "Forro da varanda", 
-        "Ralos da varanda", "Forro do banheiro"
+        "Ralos da varanda", "Forro do banheiro", "Piso acabado"
     ]
 
     # ==========================================
@@ -119,6 +82,27 @@ def main(page: ft.Page):
         if precisa_migrar:
             salvar_no_firebase(banco_dados, mostrar_snack=False)
 
+        # ==========================================
+        # MIGRAÇÃO INTELIGENTE DE NOMES DE TAREFAS
+        # ==========================================
+        teve_alteracao_nome = False
+        if "obras" in banco_dados:
+            for obra_nome, andares in banco_dados["obras"].items():
+                if isinstance(andares, dict):
+                    for andar_nome, aptos in andares.items():
+                        if isinstance(aptos, dict):
+                            for apto_nome, atividades in aptos.items():
+                                if isinstance(atividades, dict):
+                                    # Procura a chave exata ou variações do nome antigo
+                                    chaves_para_mudar = [k for k in atividades.keys() if k.lower() == "rejunte piso"]
+                                    for chave_antiga in chaves_para_mudar:
+                                        # Transfere os dados para o novo nome e apaga o antigo
+                                        atividades["Piso acabado"] = atividades.pop(chave_antiga)
+                                        teve_alteracao_nome = True
+                                        
+        if teve_alteracao_nome:
+            salvar_no_firebase(banco_dados, mostrar_snack=False)
+
     def get_cor_status(status):
         if status == "Finalizado": return ft.Colors.GREEN_500
         if status == "Não Conforme": return ft.Colors.RED_500
@@ -144,7 +128,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # PDF: AGORA IMPRIME A OBSERVAÇÃO DENTRO DOS QUADRADOS
+    # PDF: OBSERVAÇÕES NO QUADRADO
     # ==========================================
     def gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_arquivo):
         pdf = FPDF(orientation='L', unit='mm', format='A4') 
@@ -208,13 +192,12 @@ def main(page: ft.Page):
                 elif status == "Existente": pdf.set_fill_color(255, 152, 0)
                 else: pdf.set_fill_color(189, 189, 189)
 
-                # Prepara o texto para sair dentro do quadradinho
                 texto_impresso = ""
                 if status in ["Não Conforme", "Em Andamento"] and obs_texto:
-                    texto_impresso = obs_texto[:9] # Pega as primeiras 9 letras para caber
+                    texto_impresso = obs_texto[:9] 
                 
                 pdf.set_font("helvetica", 'B', 5.5)
-                pdf.set_text_color(0, 0, 0) # Cor Preta para dar leitura
+                pdf.set_text_color(0, 0, 0) 
 
                 larg = largura_corr if local == "Corredor" else largura_apto
                 
@@ -249,9 +232,8 @@ def main(page: ft.Page):
                 for nome_servico, dados in servicos.items():
                     status = dados.get("status", "Não Iniciado")
                     obs = dados.get("obs", "")
-                    foto = dados.get("foto", "")
                     
-                    if status in ["Não Conforme", "Em Andamento"] and (obs or foto):
+                    if status in ["Não Conforme", "Em Andamento"] and obs:
                         tem_obs = True
                         cor_borda = ft.Colors.RED_500 if status == "Não Conforme" else ft.Colors.BLUE_500
                         
@@ -261,19 +243,9 @@ def main(page: ft.Page):
                                 ft.Text(status, color=cor_borda, weight="bold", size=12)
                             ], alignment="spaceBetween"),
                             ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight="bold"),
-                            ft.Divider()
+                            ft.Divider(),
+                            ft.Text(f"📝 Obs: {obs}", size=14)
                         ]
-                        
-                        if obs:
-                            conteudo_card.append(ft.Text(f"📝 Obs: {obs}", size=14))
-                        if foto:
-                            conteudo_card.append(
-                                ft.Container(
-                                    content=ft.Image(src_base64=foto, fit=ft.ImageFit.COVER, border_radius=8),
-                                    margin=ft.margin.only(top=10),
-                                    border_radius=8, border=ft.border.all(1, ft.Colors.GREY_300)
-                                )
-                            )
                             
                         card = ft.Container(
                             content=ft.Column(conteudo_card),
@@ -285,7 +257,7 @@ def main(page: ft.Page):
         if not tem_obs:
             lista_galeria.controls.append(
                 ft.Container(
-                    content=ft.Text("Nenhuma pendência ou observação fotográfica encontrada nesta obra.", text_align="center", color=ft.Colors.GREY_500),
+                    content=ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align="center", color=ft.Colors.GREY_500),
                     padding=40, alignment=ft.alignment.center
                 )
             )
@@ -295,7 +267,6 @@ def main(page: ft.Page):
 
 
     def abrir_tela_dashboard(obra):
-        # ... (Código do painel mantido igual) ...
         page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
@@ -444,123 +415,8 @@ def main(page: ft.Page):
             )
             page.update()
 
-    def abrir_tela_relatorio(obra, servico_escolhido):
-        page.floating_action_button = None 
-        page.controls.clear()
-        page.vertical_alignment = ft.MainAxisAlignment.START
-
-        cabecalho = ft.Row([
-            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
-            ft.Text(f"Relatório: {servico_escolhido}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
-        ])
-
-        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
-        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
-
-        def acionar_pdf(e):
-            try:
-                botao_exportar.content.controls[1].value = "A Gerar Ficheiro..."
-                page.update()
-                
-                if not os.path.exists("assets"):
-                    os.makedirs("assets")
-                
-                padrao_busca = os.path.join("assets", f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}*.pdf")
-                for arquivo_antigo in glob.glob(padrao_busca):
-                    try:
-                        os.remove(arquivo_antigo)
-                    except: pass
-                    
-                timestamp = int(time.time())
-                nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}_{timestamp}.pdf"
-                caminho_completo = os.path.join("assets", nome_pdf)
-
-                gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
-                url_segura = f"/{urllib.parse.quote(nome_pdf)}"
-                
-                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
-                
-                botao_download = ft.Container(
-                    content=ft.Row(
-                        [ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), ft.Text("CLIQUE AQUI PARA ABRIR O PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)], 
-                        alignment=ft.MainAxisAlignment.CENTER
-                    ),
-                    bgcolor=ft.Colors.BLUE_600, padding=15, border_radius=8, ink=True,
-                    url=ft.Url(url=url_segura, target=ft.UrlTarget.SELF),
-                )
-                
-                bloco_botoes_acao.controls.clear()
-                bloco_botoes_acao.controls.append(botao_exportar)
-                bloco_botoes_acao.controls.append(botao_download)
-                page.update()
-                
-            except Exception as ex:
-                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
-                snack_erro = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
-                page.overlay.append(snack_erro)
-                snack_erro.open = True
-                page.update()
-
-        botao_exportar = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), ft.Text("Gerar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER),
-            bgcolor=ft.Colors.RED_700, padding=12, border_radius=8, ink=True, on_click=acionar_pdf
-        )
-
-        bloco_botoes_acao.controls.append(botao_exportar)
-
-        legenda = ft.Row([
-            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
-            ft.Container(width=15, height=15, bgcolor=ft.Colors.RED_500, border_radius=3), ft.Text("Pend.", size=12),
-            ft.Container(width=15, height=15, bgcolor=ft.Colors.BLUE_500, border_radius=3), ft.Text("Andam.", size=12),
-            ft.Container(width=15, height=15, bgcolor=ft.Colors.ORANGE_500, border_radius=3), ft.Text("Existente", size=12),
-            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREY_400, border_radius=3), ft.Text("Não Iniciado", size=12),
-        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
-
-        tabela = ft.Column(spacing=5)
-        
-        largura_celulas_horizontais = (35 * 14) + (5 * 14) + 45 
-        
-        linha_super_header = ft.Row([
-            ft.Container(width=60), 
-            ft.Container(
-                width=largura_celulas_horizontais, 
-                content=ft.Row([ft.Text("APARTAMENTOS E LOCAIS →", weight=ft.FontWeight.BOLD, size=11, color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER),
-                bgcolor=ft.Colors.BLUE_50, border_radius=4, padding=2
-            )
-        ], spacing=5)
-        tabela.controls.append(linha_super_header)
-
-        linha_header = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text("Andar ↓", weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.START))], spacing=5)
-        for apto_num in range(1, 15):
-            linha_header.controls.append(ft.Container(width=35, content=ft.Row([ft.Text(f"{apto_num:02d}", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
-        linha_header.controls.append(ft.Container(width=45, content=ft.Row([ft.Text("Corr.", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
-        tabela.controls.append(linha_header)
-
-        for andar in andares_ordenados:
-            linha_andar = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text(f"{andar}º", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.START))], spacing=5)
-            
-            locais_matriz = [f"{andar}{apto_num:02d}" for apto_num in range(1, 15)] + ["Corredor"]
-            
-            for local_str in locais_matriz:
-                status_atual = "Não Iniciado" 
-                if local_str in banco_dados["obras"][obra][andar] and servico_escolhido in banco_dados["obras"][obra][andar][local_str]:
-                    status_atual = banco_dados["obras"][obra][andar][local_str][servico_escolhido]["status"]
-                
-                cor_quadrado = get_cor_status(status_atual)
-                largura_celula = 45 if local_str == "Corredor" else 35
-                
-                quadrado = ft.Container(width=largura_celula, height=35, bgcolor=cor_quadrado, border_radius=4, tooltip=f"{local_str}: {status_atual}")
-                linha_andar.controls.append(quadrado)
-                
-            tabela.controls.append(linha_andar)
-
-        area_rolagem = ft.Row([ft.Column([tabela], scroll=ft.ScrollMode.AUTO)], scroll=ft.ScrollMode.AUTO, expand=True)
-
-        page.add(cabecalho, bloco_botoes_acao, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
-
 
     def abrir_tela_lancamento_status(obra):
-        # ... (Código do lançamento rápido mantido) ...
         page.floating_action_button = None 
         page.controls.clear()
         page.vertical_alignment = ft.MainAxisAlignment.START
@@ -674,21 +530,17 @@ def main(page: ft.Page):
             for apt_sel in aptos_selecionados:
                 if andar_alvo in banco_dados["obras"][obra] and apt_sel in banco_dados["obras"][obra][andar_alvo]:
                     if tarefa not in banco_dados["obras"][obra][andar_alvo][apt_sel]:
-                        banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": "", "foto": ""}
+                        banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
                     else:
                         banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
                         if status_escolhido == "Finalizado":
                             banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["obs"] = ""
-                            banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["foto"] = ""
             
             registrar_historico("Status em Lote", f"[{obra}] - Aplicou '{status_escolhido}' na ativ. '{tarefa}' em {len(aptos_selecionados)} locais do {andar_alvo}º andar.")
-            
             salvar_no_firebase(banco_dados, mostrar_snack=False)
-            
             snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso!"), bgcolor=ft.Colors.GREEN_700)
             page.overlay.append(snack)
             snack.open = True
-            
             aptos_selecionados.clear()
             desenhar_grid()
 
@@ -785,7 +637,7 @@ def main(page: ft.Page):
             for andar_alvo in andares_selecionados:
                 for apto in banco_dados["obras"][obra][andar_alvo].keys():
                     if tarefa not in banco_dados["obras"][obra][andar_alvo][apto]:
-                        banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": "", "foto": ""}
+                        banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
             
             registrar_historico("Criou Tarefa Lote", f"[{obra}] - Injetou '{tarefa}' em {len(andares_selecionados)} andares.")
             
@@ -902,7 +754,160 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # TELA 4: CHECKLIST INDIVIDUAL DO APTO (COM FOTO)
+    # TELA 5: RELATÓRIO MATRICIAL (App Web)
+    # ==========================================
+    def abrir_tela_relatorio(obra, servico_escolhido):
+        page.floating_action_button = None 
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
+            ft.Text(f"Relatório: {servico_escolhido}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
+        ])
+
+        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+
+        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+        def acionar_pdf(e):
+            try:
+                botao_exportar.content.controls[1].value = "A Gerar Ficheiro..."
+                page.update()
+                
+                if not os.path.exists("assets"):
+                    os.makedirs("assets")
+                
+                padrao_busca = os.path.join("assets", f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}*.pdf")
+                for arquivo_antigo in glob.glob(padrao_busca):
+                    try:
+                        os.remove(arquivo_antigo)
+                    except:
+                        pass
+                    
+                timestamp = int(time.time())
+                nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}_{timestamp}.pdf"
+                caminho_completo = os.path.join("assets", nome_pdf)
+
+                gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
+                url_segura = f"/{urllib.parse.quote(nome_pdf)}"
+                
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                
+                botao_download = ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
+                            ft.Text("CLIQUE AQUI PARA ABRIR O PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
+                        ], 
+                        alignment=ft.MainAxisAlignment.CENTER
+                    ),
+                    bgcolor=ft.Colors.BLUE_600,
+                    padding=15,
+                    border_radius=8,
+                    ink=True,
+                    url=ft.Url(
+                        url=url_segura,
+                        target=ft.UrlTarget.SELF,
+                    ),
+                )
+                
+                bloco_botoes_acao.controls.clear()
+                bloco_botoes_acao.controls.append(botao_exportar)
+                bloco_botoes_acao.controls.append(botao_download)
+                page.update()
+                
+            except Exception as ex:
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                snack_erro = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack_erro)
+                snack_erro.open = True
+                page.update()
+
+        botao_exportar = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), 
+                    ft.Text("Gerar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+                ], 
+                alignment=ft.MainAxisAlignment.CENTER
+            ),
+            bgcolor=ft.Colors.RED_700, 
+            padding=12, 
+            border_radius=8, 
+            ink=True, 
+            on_click=acionar_pdf
+        )
+
+        bloco_botoes_acao.controls.append(botao_exportar)
+
+        legenda = ft.Row([
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.RED_500, border_radius=3), ft.Text("Pend.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.BLUE_500, border_radius=3), ft.Text("Andam.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.ORANGE_500, border_radius=3), ft.Text("Existente", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREY_400, border_radius=3), ft.Text("Não Iniciado", size=12),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+
+        tabela = ft.Column(spacing=5)
+        
+        largura_celulas_horizontais = (35 * 14) + (5 * 14) + 45 
+        
+        linha_super_header = ft.Row([
+            ft.Container(width=60), 
+            ft.Container(
+                width=largura_celulas_horizontais, 
+                content=ft.Row([ft.Text("APARTAMENTOS E LOCAIS →", weight=ft.FontWeight.BOLD, size=11, color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.BLUE_50, border_radius=4, padding=2
+            )
+        ], spacing=5)
+        tabela.controls.append(linha_super_header)
+
+        linha_header = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text("Andar ↓", weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+        for apto_num in range(1, 15):
+            linha_header.controls.append(ft.Container(width=35, content=ft.Row([ft.Text(f"{apto_num:02d}", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+        linha_header.controls.append(ft.Container(width=45, content=ft.Row([ft.Text("Corr.", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+        tabela.controls.append(linha_header)
+
+        for andar in andares_ordenados:
+            linha_andar = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text(f"{andar}º", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+            
+            locais_matriz = [f"{andar}{apto_num:02d}" for apto_num in range(1, 15)] + ["Corredor"]
+            
+            for local_str in locais_matriz:
+                status_atual = "Não Iniciado" 
+                texto_impresso = ""
+                
+                if local_str in banco_dados["obras"][obra][andar] and servico_escolhido in banco_dados["obras"][obra][andar][local_str]:
+                    dados_servico = banco_dados["obras"][obra][andar][local_str][servico_escolhido]
+                    status_atual = dados_servico.get("status", "Não Iniciado")
+                    
+                    # Carrega as observações (limitadas para não quebrar o PDF)
+                    obs = dados_servico.get("obs", "").replace('\n', ' ')
+                    if status_atual in ["Não Conforme", "Em Andamento"] and obs:
+                        texto_impresso = obs[:9]
+                
+                cor_quadrado = get_cor_status(status_atual)
+                largura_celula = 45 if local_str == "Corredor" else 35
+                
+                quadrado = ft.Container(
+                    width=largura_celula, height=35, 
+                    bgcolor=cor_quadrado, border_radius=4, 
+                    tooltip=f"{local_str}: {status_atual}",
+                    content=ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold") if texto_impresso else None,
+                    alignment=ft.alignment.center
+                )
+                linha_andar.controls.append(quadrado)
+                
+            tabela.controls.append(linha_andar)
+
+        area_rolagem = ft.Row([ft.Column([tabela], scroll=ft.ScrollMode.AUTO)], scroll=ft.ScrollMode.AUTO, expand=True)
+
+        page.add(cabecalho, bloco_botoes_acao, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
+
+
+    # ==========================================
+    # TELA 4: CHECKLIST INDIVIDUAL DO APTO
     # ==========================================
     def abrir_tela_atividades(obra, andar, apto):
         page.floating_action_button = None 
@@ -942,10 +947,9 @@ def main(page: ft.Page):
             for nome_servico, dados in list(banco_dados["obras"][obra][andar][apto].items()):
                 cor_botao = get_cor_status(dados["status"])
                 
-                # Mostra um pequeno ícone se tiver foto ou observação (Apenas visualmente rico)
+                # Mostra um pequeno ícone se tiver observação
                 icones_extras = []
                 if dados.get("obs"): icones_extras.append(ft.Icon(ft.Icons.NOTES, size=12, color=ft.Colors.WHITE70))
-                if dados.get("foto"): icones_extras.append(ft.Icon(ft.Icons.CAMERA_ALT, size=12, color=ft.Colors.WHITE70))
                 
                 conteudo_btn = ft.Row([ft.Text(nome_servico, size=14, weight=ft.FontWeight.W_600, color=ft.Colors.WHITE)] + icones_extras)
 
@@ -976,22 +980,8 @@ def main(page: ft.Page):
             
             campo_obs = ft.TextField(label="Observação (sai no PDF)", value=dados_atuais.get("obs", ""), multiline=True)
             
-            # Botão de Anexo de Foto
-            tem_foto = bool(dados_atuais.get("foto", ""))
-            btn_foto = ft.ElevatedButton(
-                text="Foto Anexada" if tem_foto else "Anexar Fotografia", 
-                icon=ft.Icons.CHECK if tem_foto else ft.Icons.CAMERA_ALT,
-                bgcolor=ft.Colors.GREEN_600 if tem_foto else ft.Colors.BLUE_GREY_100,
-                color=ft.Colors.WHITE if tem_foto else ft.Colors.BLACK87,
-                on_click=lambda e: file_picker.pick_files()
-            )
-            
-            # Ligação com o FilePicker invisível da página
-            file_picker.dados_alvo = dados_atuais
-            file_picker.btn_alvo = btn_foto
-
             # Mostra as opções apenas para Pendente ou Andamento
-            bloco_extras = ft.Column([campo_obs, btn_foto], visible=(status_inicial in ["Não Conforme", "Em Andamento"]))
+            bloco_extras = ft.Column([campo_obs], visible=(status_inicial in ["Não Conforme", "Em Andamento"]))
             
             def ao_mudar_dropdown(e):
                 if menu_dropdown.value in ["Não Conforme", "Em Andamento"]:
@@ -1005,10 +995,9 @@ def main(page: ft.Page):
             def salvar_popup(e):
                 novo_status = menu_dropdown.value
                 
-                # Se mudou para Finalizado, EXCLUI a foto e observação automaticamente
+                # Se mudou para Finalizado, limpa as anotações antigas
                 if novo_status == "Finalizado":
                     dados_atuais["obs"] = ""
-                    dados_atuais["foto"] = ""
                 else:
                     dados_atuais["obs"] = campo_obs.value
                 
@@ -1034,7 +1023,7 @@ def main(page: ft.Page):
         def add_nova_atividade(e):
             nova_ativ = campo_nova.value.strip().replace(".", "") 
             if nova_ativ and nova_ativ not in banco_dados["obras"][obra][andar][apto]:
-                banco_dados["obras"][obra][andar][apto][nova_ativ] = {"status": "Não Iniciado", "obs": "", "foto": ""}
+                banco_dados["obras"][obra][andar][apto][nova_ativ] = {"status": "Não Iniciado", "obs": ""}
                 registrar_historico("Nova Ativ. Individual", f"[{obra}] - Criou '{nova_ativ}' no {andar}º > {apto}.")
                 salvar_no_firebase(banco_dados) 
                 campo_nova.value = ""
@@ -1177,7 +1166,9 @@ def main(page: ft.Page):
             dlg_rel.open = True
             page.update()
 
-        # MENU FLUTUANTE (ESTILO SS RESTÔ) COM A NOVA GALERIA DE OBSERVAÇÕES
+        # ==========================================
+        # MENU FLUTUANTE (ESTILO SS RESTÔ)
+        # ==========================================
         def abrir_menu_flutuante(e):
             botoes_menu = []
 
@@ -1199,7 +1190,7 @@ def main(page: ft.Page):
                 )
             )
             
-            # NOVO BOTÃO DA GALERIA
+            # BOTÃO DA GALERIA DE OBSERVAÇÕES
             botoes_menu.append(
                 ft.Container(
                     content=ft.Column([ft.Icon(ft.Icons.PHOTO_CAMERA_BACK, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment="center", horizontal_alignment="center", spacing=2),
@@ -1300,6 +1291,9 @@ def main(page: ft.Page):
         desenhar_lista_andares()
 
 
+    # ==========================================
+    # TELA DE HISTÓRICO DE AUDITORIA BLINDADO
+    # ==========================================
     def abrir_tela_historico():
         page.floating_action_button = None 
         page.controls.clear()
@@ -1346,6 +1340,10 @@ def main(page: ft.Page):
         page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_hist)
         page.update()
 
+
+    # ==========================================
+    # TELA DE GESTÃO DE USUÁRIOS (SÓ ADMIN)
+    # ==========================================
     def abrir_tela_usuarios():
         page.floating_action_button = None 
         page.controls.clear()
@@ -1619,5 +1617,4 @@ os.makedirs("assets", exist_ok=True)
 porta = int(os.environ.get("PORT", 8000))
 
 if __name__ == "__main__":
-    # upload_dir ativado para permitir armazenamento das fotos!
-    ft.run(main, port=porta, host="0.0.0.0", assets_dir="assets", upload_dir="assets")
+    ft.run(main, port=porta, host="0.0.0.0", assets_dir="assets")
