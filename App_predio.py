@@ -129,7 +129,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # PDF: OBSERVAÇÕES COMPLETAS NO QUADRADO
+    # PDF: OBSERVAÇÕES MULTILINHA NO QUADRADO
     # ==========================================
     def gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_arquivo):
         pdf = FPDF(orientation='L', unit='mm', format='A4') 
@@ -185,7 +185,7 @@ def main(page: ft.Page):
                 if local in banco_dados["obras"][obra][andar] and servico_escolhido in banco_dados["obras"][obra][andar][local]:
                     dados_servico = banco_dados["obras"][obra][andar][local][servico_escolhido]
                     status = dados_servico.get("status", "Não Iniciado")
-                    obs_texto = dados_servico.get("obs", "").replace('\n', ' ')
+                    obs_texto = dados_servico.get("obs", "")
 
                 if status == "Finalizado": pdf.set_fill_color(76, 175, 80)
                 elif status == "Não Conforme": pdf.set_fill_color(244, 67, 54)
@@ -194,7 +194,6 @@ def main(page: ft.Page):
                 else: pdf.set_fill_color(189, 189, 189)
 
                 texto_impresso = ""
-                # REMOVIDO O LIMITE DE CARACTERES: Pega a observação inteira
                 if status in ["Não Conforme", "Em Andamento"] and obs_texto:
                     texto_impresso = obs_texto
                 
@@ -202,11 +201,28 @@ def main(page: ft.Page):
                 pdf.set_text_color(0, 0, 0) 
 
                 larg = largura_corr if local == "Corredor" else largura_apto
+                x_cell = pdf.get_x()
+                y_cell = pdf.get_y()
                 
+                # Desenha o fundo e a borda da célula
                 if i == len(locais) - 1:
-                    pdf.cell(larg, altura_celula, txt=texto_impresso, border=1, fill=True, align='C', new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    pdf.cell(larg, altura_celula, txt="", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
+                    next_x, next_y = pdf.get_x(), pdf.get_y()
                 else:
-                    pdf.cell(larg, altura_celula, txt=texto_impresso, border=1, fill=True, align='C', new_x=XPos.RIGHT, new_y=YPos.TOP)
+                    pdf.cell(larg, altura_celula, txt="", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP)
+                    next_x, next_y = pdf.get_x(), pdf.get_y()
+                
+                # Desenha o texto linha a linha por cima do quadrado
+                if texto_impresso:
+                    linhas = str(texto_impresso).split('\n')[:3] # Limita a 3 linhas para não vazar do papel
+                    alt_linha = 2.2
+                    y_start_text = y_cell + (altura_celula - (len(linhas) * alt_linha)) / 2
+                    for idx, linha in enumerate(linhas):
+                        pdf.set_xy(x_cell, y_start_text + (idx * alt_linha))
+                        pdf.cell(larg, alt_linha, txt=linha, align='C')
+                
+                # Reposiciona o cursor para a próxima célula
+                pdf.set_xy(next_x, next_y)
 
         pdf.output(caminho_arquivo)
 
@@ -246,7 +262,7 @@ def main(page: ft.Page):
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight="bold"),
                             ft.Divider(),
-                            ft.Text(f"📝 Obs: {obs}", size=14)
+                            ft.Text(f"📝 Obs:\n{obs}", size=14)
                         ]
                             
                         card = ft.Container(
@@ -259,7 +275,7 @@ def main(page: ft.Page):
         if not tem_obs:
             lista_galeria.controls.append(
                 ft.Container(
-                    content=ft.Row([ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align="center", color=ft.Colors.GREY_500)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)], alignment=ft.MainAxisAlignment.CENTER),
                     padding=40
                 )
             )
@@ -884,19 +900,21 @@ def main(page: ft.Page):
                     dados_servico = banco_dados["obras"][obra][andar][local_str][servico_escolhido]
                     status_atual = dados_servico.get("status", "Não Iniciado")
                     
-                    obs = dados_servico.get("obs", "").replace('\n', ' ')
-                    # REMOVIDO O LIMITE DE CARACTERES: A observação será mostrada na íntegra
+                    obs = dados_servico.get("obs", "")
                     if status_atual in ["Não Conforme", "Em Andamento"] and obs:
                         texto_impresso = obs
                 
                 cor_quadrado = get_cor_status(status_atual)
                 largura_celula = 45 if local_str == "Corredor" else 35
                 
+                # Container com o texto centralizado no meio do quadradinho, aceitando as quebras de linha!
                 quadrado = ft.Container(
                     width=largura_celula, height=35, 
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
-                    content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold")], alignment=ft.MainAxisAlignment.CENTER) if texto_impresso else None
+                    content=ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold", text_align=ft.TextAlign.CENTER) if texto_impresso else None,
+                    alignment=ft.alignment.center,
+                    padding=1
                 )
                 linha_andar.controls.append(quadrado)
                 
@@ -1191,7 +1209,6 @@ def main(page: ft.Page):
                 )
             )
             
-            # BOTÃO DA GALERIA DE OBSERVAÇÕES
             botoes_menu.append(
                 ft.Container(
                     content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment="center", horizontal_alignment="center", spacing=2),
