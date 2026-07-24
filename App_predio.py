@@ -19,7 +19,6 @@ def main(page: ft.Page):
 
     # ==========================================
     # COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
-    # Variável local imune a atualizações do Flet
     # ==========================================
     estado_sessao = {
         "usuario": None,
@@ -204,7 +203,6 @@ def main(page: ft.Page):
                 x_cell = pdf.get_x()
                 y_cell = pdf.get_y()
                 
-                # Desenha o fundo e a borda da célula
                 if i == len(locais) - 1:
                     pdf.cell(larg, altura_celula, txt="", border=1, fill=True, new_x=XPos.LMARGIN, new_y=YPos.NEXT)
                     next_x, next_y = pdf.get_x(), pdf.get_y()
@@ -212,16 +210,14 @@ def main(page: ft.Page):
                     pdf.cell(larg, altura_celula, txt="", border=1, fill=True, new_x=XPos.RIGHT, new_y=YPos.TOP)
                     next_x, next_y = pdf.get_x(), pdf.get_y()
                 
-                # Desenha o texto linha a linha por cima do quadrado
                 if texto_impresso:
-                    linhas = str(texto_impresso).split('\n')[:3] # Limita a 3 linhas para não vazar do papel
+                    linhas = str(texto_impresso).split('\n')[:3] 
                     alt_linha = 2.2
                     y_start_text = y_cell + (altura_celula - (len(linhas) * alt_linha)) / 2
                     for idx, linha in enumerate(linhas):
                         pdf.set_xy(x_cell, y_start_text + (idx * alt_linha))
                         pdf.cell(larg, alt_linha, txt=linha, align='C')
                 
-                # Reposiciona o cursor para a próxima célula
                 pdf.set_xy(next_x, next_y)
 
         pdf.output(caminho_arquivo)
@@ -257,10 +253,10 @@ def main(page: ft.Page):
                         
                         conteudo_card = [
                             ft.Row([
-                                ft.Text(f"{andar}º Andar - Apto {apto}", weight="bold", size=16),
-                                ft.Text(status, color=cor_borda, weight="bold", size=12)
+                                ft.Text(f"{andar}º Andar - Apto {apto}", weight=ft.FontWeight.BOLD, size=16),
+                                ft.Text(status, color=cor_borda, weight=ft.FontWeight.BOLD, size=12)
                             ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
-                            ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight="bold"),
+                            ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight=ft.FontWeight.BOLD),
                             ft.Divider(),
                             ft.Text(f"📝 Obs:\n{obs}", size=14)
                         ]
@@ -907,13 +903,12 @@ def main(page: ft.Page):
                 cor_quadrado = get_cor_status(status_atual)
                 largura_celula = 45 if local_str == "Corredor" else 35
                 
-                # Container com o texto centralizado no meio do quadradinho, aceitando as quebras de linha!
                 quadrado = ft.Container(
                     width=largura_celula, height=35, 
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
-                    content=ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold", text_align=ft.TextAlign.CENTER) if texto_impresso else None,
-                    alignment=ft.alignment.center,
+                    content=ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER) if texto_impresso else None,
+                    alignment=ft.alignment.CENTER,
                     padding=1
                 )
                 linha_andar.controls.append(quadrado)
@@ -1198,20 +1193,21 @@ def main(page: ft.Page):
 
             botoes_menu.append(
                 ft.Container(
-                    content=ft.Column([ft.Icon(ft.Icons.GRID_ON, size=35, color=ft.Colors.WHITE), ft.Text("Relatório", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
+                    content=ft.Column([ft.Icon(ft.Icons.GRID_ON, size=35, color=ft.Colors.WHITE), ft.Text("Relatório", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     bgcolor=ft.Colors.BLUE_800, border_radius=12, ink=True, on_click=lambda _: acao(iniciar_relatorio)
                 )
             )
             botoes_menu.append(
                 ft.Container(
-                    content=ft.Column([ft.Icon(ft.Icons.BAR_CHART, size=35, color=ft.Colors.WHITE), ft.Text("Painel", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
+                    content=ft.Column([ft.Icon(ft.Icons.BAR_CHART, size=35, color=ft.Colors.WHITE), ft.Text("Painel", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                     bgcolor=ft.Colors.TEAL_700, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_dashboard(obra))
                 )
             )
             
+            # BOTÃO DA GALERIA DE OBSERVAÇÕES
             botoes_menu.append(
                 ft.Container(
-                    content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment="center", horizontal_alignment="center", spacing=2),
+                    content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
                     bgcolor=ft.Colors.INDIGO_600, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_observacoes(obra))
                 )
             )
@@ -1219,19 +1215,19 @@ def main(page: ft.Page):
             if perfil_user in ["admin", "editor"]:
                 botoes_menu.append(
                     ft.Container(
-                        content=ft.Column([ft.Icon(ft.Icons.CHECKLIST, size=35, color=ft.Colors.WHITE), ft.Text("Status\nRápido", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment="center", horizontal_alignment="center", spacing=2),
+                        content=ft.Column([ft.Icon(ft.Icons.CHECKLIST, size=35, color=ft.Colors.WHITE), ft.Text("Status\nRápido", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
                         bgcolor=ft.Colors.ORANGE_700, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_lancamento_status(obra))
                     )
                 )
                 botoes_menu.append(
                     ft.Container(
-                        content=ft.Column([ft.Icon(ft.Icons.LIBRARY_ADD, size=35, color=ft.Colors.WHITE), ft.Text("+ Tarefa", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
+                        content=ft.Column([ft.Icon(ft.Icons.LIBRARY_ADD, size=35, color=ft.Colors.WHITE), ft.Text("+ Tarefa", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=ft.Colors.PURPLE_700, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_lancamento_tarefas(obra))
                     )
                 )
                 botoes_menu.append(
                     ft.Container(
-                        content=ft.Column([ft.Icon(ft.Icons.DELETE_SWEEP, size=35, color=ft.Colors.WHITE), ft.Text("- Tarefa", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
+                        content=ft.Column([ft.Icon(ft.Icons.DELETE_SWEEP, size=35, color=ft.Colors.WHITE), ft.Text("- Tarefa", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=ft.Colors.RED_800, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_remover_tarefas(obra))
                     )
                 )
