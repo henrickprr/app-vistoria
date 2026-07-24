@@ -129,7 +129,7 @@ def main(page: ft.Page):
 
 
     # ==========================================
-    # PDF: OBSERVAÇÕES NO QUADRADO
+    # PDF: OBSERVAÇÕES COMPLETAS NO QUADRADO
     # ==========================================
     def gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_arquivo):
         pdf = FPDF(orientation='L', unit='mm', format='A4') 
@@ -194,8 +194,9 @@ def main(page: ft.Page):
                 else: pdf.set_fill_color(189, 189, 189)
 
                 texto_impresso = ""
+                # REMOVIDO O LIMITE DE CARACTERES: Pega a observação inteira
                 if status in ["Não Conforme", "Em Andamento"] and obs_texto:
-                    texto_impresso = obs_texto[:9] 
+                    texto_impresso = obs_texto
                 
                 pdf.set_font("helvetica", 'B', 5.5)
                 pdf.set_text_color(0, 0, 0) 
@@ -883,10 +884,10 @@ def main(page: ft.Page):
                     dados_servico = banco_dados["obras"][obra][andar][local_str][servico_escolhido]
                     status_atual = dados_servico.get("status", "Não Iniciado")
                     
-                    # Carrega as observações (limitadas para não quebrar o PDF)
                     obs = dados_servico.get("obs", "").replace('\n', ' ')
+                    # REMOVIDO O LIMITE DE CARACTERES: A observação será mostrada na íntegra
                     if status_atual in ["Não Conforme", "Em Andamento"] and obs:
-                        texto_impresso = obs[:9]
+                        texto_impresso = obs
                 
                 cor_quadrado = get_cor_status(status_atual)
                 largura_celula = 45 if local_str == "Corredor" else 35
