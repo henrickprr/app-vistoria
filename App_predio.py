@@ -19,6 +19,7 @@ def main(page: ft.Page):
 
     # ==========================================
     # COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
+    # Variável local imune a atualizações do Flet
     # ==========================================
     estado_sessao = {
         "usuario": None,
@@ -907,8 +908,8 @@ def main(page: ft.Page):
                     width=largura_celula, height=35, 
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
-                    content=ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER) if texto_impresso else None,
-                    alignment=ft.alignment.CENTER,
+                    content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER) if texto_impresso else None,
+                    alignment=ft.Alignment.CENTER,
                     padding=1
                 )
                 linha_andar.controls.append(quadrado)
