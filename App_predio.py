@@ -242,7 +242,7 @@ def main(page: ft.Page):
                             ft.Row([
                                 ft.Text(f"{andar}º Andar - Apto {apto}", weight="bold", size=16),
                                 ft.Text(status, color=cor_borda, weight="bold", size=12)
-                            ], alignment="spaceBetween"),
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight="bold"),
                             ft.Divider(),
                             ft.Text(f"📝 Obs: {obs}", size=14)
@@ -258,8 +258,8 @@ def main(page: ft.Page):
         if not tem_obs:
             lista_galeria.controls.append(
                 ft.Container(
-                    content=ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align="center", color=ft.Colors.GREY_500),
-                    padding=40, alignment=ft.alignment.center
+                    content=ft.Row([ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align="center", color=ft.Colors.GREY_500)], alignment=ft.MainAxisAlignment.CENTER),
+                    padding=40
                 )
             )
 
@@ -755,6 +755,158 @@ def main(page: ft.Page):
 
 
     # ==========================================
+    # TELA 5: RELATÓRIO MATRICIAL (App Web)
+    # ==========================================
+    def abrir_tela_relatorio(obra, servico_escolhido):
+        page.floating_action_button = None 
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_andares(obra)),
+            ft.Text(f"Relatório: {servico_escolhido}", size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700, expand=True)
+        ])
+
+        andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
+
+        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+
+        def acionar_pdf(e):
+            try:
+                botao_exportar.content.controls[1].value = "A Gerar Ficheiro..."
+                page.update()
+                
+                if not os.path.exists("assets"):
+                    os.makedirs("assets")
+                
+                padrao_busca = os.path.join("assets", f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}*.pdf")
+                for arquivo_antigo in glob.glob(padrao_busca):
+                    try:
+                        os.remove(arquivo_antigo)
+                    except:
+                        pass
+                    
+                timestamp = int(time.time())
+                nome_pdf = f"Relatorio_{obra.replace(' ', '_')}_{servico_escolhido.replace(' ', '_')}_{timestamp}.pdf"
+                caminho_completo = os.path.join("assets", nome_pdf)
+
+                gerar_pdf(obra, servico_escolhido, andares_ordenados, caminho_completo)
+                url_segura = f"/{urllib.parse.quote(nome_pdf)}"
+                
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                
+                botao_download = ft.Container(
+                    content=ft.Row(
+                        [
+                            ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
+                            ft.Text("CLIQUE AQUI PARA ABRIR O PDF", color=ft.Colors.WHITE, weight=ft.FontWeight.BOLD, size=15)
+                        ], 
+                        alignment=ft.MainAxisAlignment.CENTER
+                    ),
+                    bgcolor=ft.Colors.BLUE_600,
+                    padding=15,
+                    border_radius=8,
+                    ink=True,
+                    url=ft.Url(
+                        url=url_segura,
+                        target=ft.UrlTarget.SELF,
+                    ),
+                )
+                
+                bloco_botoes_acao.controls.clear()
+                bloco_botoes_acao.controls.append(botao_exportar)
+                bloco_botoes_acao.controls.append(botao_download)
+                page.update()
+                
+            except Exception as ex:
+                botao_exportar.content.controls[1].value = "Gerar PDF (A4)"
+                snack_erro = ft.SnackBar(ft.Text(f"Erro ao gerar PDF: {ex}"), bgcolor=ft.Colors.RED_700)
+                page.overlay.append(snack_erro)
+                snack_erro.open = True
+                page.update()
+
+        botao_exportar = ft.Container(
+            content=ft.Row(
+                [
+                    ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), 
+                    ft.Text("Gerar PDF (A4)", weight=ft.FontWeight.BOLD, color=ft.Colors.WHITE)
+                ], 
+                alignment=ft.MainAxisAlignment.CENTER
+            ),
+            bgcolor=ft.Colors.RED_700, 
+            padding=12, 
+            border_radius=8, 
+            ink=True, 
+            on_click=acionar_pdf
+        )
+
+        bloco_botoes_acao.controls.append(botao_exportar)
+
+        legenda = ft.Row([
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREEN_500, border_radius=3), ft.Text("OK", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.RED_500, border_radius=3), ft.Text("Pend.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.BLUE_500, border_radius=3), ft.Text("Andam.", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.ORANGE_500, border_radius=3), ft.Text("Existente", size=12),
+            ft.Container(width=15, height=15, bgcolor=ft.Colors.GREY_400, border_radius=3), ft.Text("Não Iniciado", size=12),
+        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+
+        tabela = ft.Column(spacing=5)
+        
+        largura_celulas_horizontais = (35 * 14) + (5 * 14) + 45 
+        
+        linha_super_header = ft.Row([
+            ft.Container(width=60), 
+            ft.Container(
+                width=largura_celulas_horizontais, 
+                content=ft.Row([ft.Text("APARTAMENTOS E LOCAIS →", weight=ft.FontWeight.BOLD, size=11, color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER),
+                bgcolor=ft.Colors.BLUE_50, border_radius=4, padding=2
+            )
+        ], spacing=5)
+        tabela.controls.append(linha_super_header)
+
+        linha_header = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text("Andar ↓", weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+        for apto_num in range(1, 15):
+            linha_header.controls.append(ft.Container(width=35, content=ft.Row([ft.Text(f"{apto_num:02d}", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+        linha_header.controls.append(ft.Container(width=45, content=ft.Row([ft.Text("Corr.", weight=ft.FontWeight.BOLD, size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+        tabela.controls.append(linha_header)
+
+        for andar in andares_ordenados:
+            linha_andar = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text(f"{andar}º", weight=ft.FontWeight.BOLD)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+            
+            locais_matriz = [f"{andar}{apto_num:02d}" for apto_num in range(1, 15)] + ["Corredor"]
+            
+            for local_str in locais_matriz:
+                status_atual = "Não Iniciado" 
+                texto_impresso = ""
+                
+                if local_str in banco_dados["obras"][obra][andar] and servico_escolhido in banco_dados["obras"][obra][andar][local_str]:
+                    dados_servico = banco_dados["obras"][obra][andar][local_str][servico_escolhido]
+                    status_atual = dados_servico.get("status", "Não Iniciado")
+                    
+                    # Carrega as observações (limitadas para não quebrar o PDF)
+                    obs = dados_servico.get("obs", "").replace('\n', ' ')
+                    if status_atual in ["Não Conforme", "Em Andamento"] and obs:
+                        texto_impresso = obs[:9]
+                
+                cor_quadrado = get_cor_status(status_atual)
+                largura_celula = 45 if local_str == "Corredor" else 35
+                
+                quadrado = ft.Container(
+                    width=largura_celula, height=35, 
+                    bgcolor=cor_quadrado, border_radius=4, 
+                    tooltip=f"{local_str}: {status_atual}",
+                    content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold")], alignment=ft.MainAxisAlignment.CENTER) if texto_impresso else None
+                )
+                linha_andar.controls.append(quadrado)
+                
+            tabela.controls.append(linha_andar)
+
+        area_rolagem = ft.Row([ft.Column([tabela], scroll=ft.ScrollMode.AUTO)], scroll=ft.ScrollMode.AUTO, expand=True)
+
+        page.add(cabecalho, bloco_botoes_acao, legenda, ft.Divider(height=10, color=ft.Colors.TRANSPARENT), area_rolagem)
+
+
+    # ==========================================
     # TELA 4: CHECKLIST INDIVIDUAL DO APTO
     # ==========================================
     def abrir_tela_atividades(obra, andar, apto):
@@ -795,6 +947,7 @@ def main(page: ft.Page):
             for nome_servico, dados in list(banco_dados["obras"][obra][andar][apto].items()):
                 cor_botao = get_cor_status(dados["status"])
                 
+                # Mostra um pequeno ícone se tiver observação
                 icones_extras = []
                 if dados.get("obs"): icones_extras.append(ft.Icon(ft.Icons.NOTES, size=12, color=ft.Colors.WHITE70))
                 
@@ -827,6 +980,7 @@ def main(page: ft.Page):
             
             campo_obs = ft.TextField(label="Observação (sai no PDF)", value=dados_atuais.get("obs", ""), multiline=True)
             
+            # Mostra as opções apenas para Pendente ou Andamento
             bloco_extras = ft.Column([campo_obs], visible=(status_inicial in ["Não Conforme", "Em Andamento"]))
             
             def ao_mudar_dropdown(e):
@@ -841,6 +995,7 @@ def main(page: ft.Page):
             def salvar_popup(e):
                 novo_status = menu_dropdown.value
                 
+                # Se mudou para Finalizado, limpa as anotações antigas
                 if novo_status == "Finalizado":
                     dados_atuais["obs"] = ""
                 else:
@@ -1134,6 +1289,177 @@ def main(page: ft.Page):
 
         page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_andares, linha_add)
         desenhar_lista_andares()
+
+
+    # ==========================================
+    # TELA DE HISTÓRICO DE AUDITORIA BLINDADO
+    # ==========================================
+    def abrir_tela_historico():
+        page.floating_action_button = None 
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
+            ft.Text("Histórico de Ações", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+        ])
+
+        lista_hist = ft.ListView(expand=True, spacing=10)
+        historico_dados = banco_dados.get("historico", [])
+
+        if not historico_dados:
+            lista_hist.controls.append(ft.Text("Nenhum registro encontrado.", color=ft.Colors.GREY_500))
+        else:
+            for item in historico_dados:
+                try:
+                    if isinstance(item, dict):
+                        acao_str = str(item.get('acao', 'Ação'))
+                        user_str = str(item.get('user', 'SISTEMA'))
+                        data_str = str(item.get('data', ''))
+                        detalhes_str = str(item.get('detalhes', ''))
+
+                        cor_acao = ft.Colors.BLUE_700
+                        if "Excluiu" in acao_str or "Removeu" in acao_str: cor_acao = ft.Colors.RED_700
+                        elif "Criou" in acao_str or "Nova" in acao_str: cor_acao = ft.Colors.PURPLE_700
+                        elif "Status" in acao_str or "Editou" in acao_str: cor_acao = ft.Colors.ORANGE_700
+
+                        card = ft.Container(
+                            content=ft.Column([
+                                ft.Row([
+                                    ft.Text(f"{data_str} - {user_str.upper()}", size=11, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                                    ft.Text(acao_str, size=11, weight=ft.FontWeight.BOLD, color=cor_acao),
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Text(detalhes_str, size=13, color=ft.Colors.BLACK87)
+                            ]),
+                            bgcolor=ft.Colors.GREY_100, padding=12, border_radius=8
+                        )
+                        lista_hist.controls.append(card)
+                except Exception:
+                    pass
+
+        page.add(cabecalho, ft.Divider(color=ft.Colors.TRANSPARENT), lista_hist)
+        page.update()
+
+
+    # ==========================================
+    # TELA DE GESTÃO DE USUÁRIOS (SÓ ADMIN)
+    # ==========================================
+    def abrir_tela_usuarios():
+        page.floating_action_button = None 
+        page.controls.clear()
+        page.vertical_alignment = ft.MainAxisAlignment.START
+        
+        cabecalho = ft.Row([
+            ft.IconButton(icon=ft.Icons.ARROW_BACK, icon_color=ft.Colors.BLUE_700, on_click=lambda _: abrir_tela_obras()),
+            ft.Text("Gestão de Usuários", size=22, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+        ])
+
+        lista_users = ft.ListView(expand=True, spacing=10)
+
+        def abrir_popup_editar(username):
+            info_atual = banco_dados["usuarios"][username]
+            edit_nome = ft.TextField(label="Nome Completo", value=info_atual["nome"])
+            edit_senha = ft.TextField(label="Nova Senha", value=info_atual["senha"])
+            edit_perfil = ft.Dropdown(
+                options=[ft.dropdown.Option("admin"), ft.dropdown.Option("editor"), ft.dropdown.Option("visualizador")],
+                value=info_atual["perfil"]
+            )
+
+            def salvar_edicao(e):
+                banco_dados["usuarios"][username]["nome"] = edit_nome.value.strip()
+                banco_dados["usuarios"][username]["senha"] = edit_senha.value.strip()
+                banco_dados["usuarios"][username]["perfil"] = edit_perfil.value
+                salvar_no_firebase(banco_dados)
+                dlg_edit.open = False
+                desenhar_lista_usuarios()
+                page.update()
+
+            dlg_edit = ft.AlertDialog(
+                title=ft.Text(f"Editar Usuário: {username}"),
+                content=ft.Column([edit_nome, edit_senha, edit_perfil], tight=True),
+                actions=[
+                    ft.TextButton("Cancelar", on_click=lambda e: fechar_dlg(dlg_edit)),
+                    ft.TextButton("Salvar", on_click=salvar_edicao, style=ft.ButtonStyle(color=ft.Colors.BLUE_700))
+                ]
+            )
+            page.overlay.append(dlg_edit)
+            dlg_edit.open = True
+            page.update()
+
+        def confirmar_exclusao_user(username):
+            def deletar(e):
+                if username == "admin":
+                    snack = ft.SnackBar(ft.Text("Não é possível apagar o Administrador Principal!"), bgcolor=ft.Colors.RED_700)
+                    page.overlay.append(snack)
+                    snack.open = True
+                else:
+                    del banco_dados["usuarios"][username]
+                    salvar_no_firebase(banco_dados)
+                    desenhar_lista_usuarios()
+                dlg.open = False
+                page.update()
+                
+            dlg = ft.AlertDialog(title=ft.Text("Apagar Usuário"), content=ft.Text(f"Deseja remover o acesso de '{username}'?"), actions=[ft.TextButton("Cancelar", on_click=lambda e: fechar_dlg(dlg)), ft.TextButton("Excluir", on_click=deletar, style=ft.ButtonStyle(color=ft.Colors.RED))])
+            page.overlay.append(dlg)
+            dlg.open = True
+            page.update()
+
+        def fechar_dlg(dlg):
+            dlg.open = False
+            page.update()
+
+        def desenhar_lista_usuarios():
+            lista_users.controls.clear()
+            for user, info in banco_dados["usuarios"].items():
+                cor_icone = ft.Colors.RED if info["perfil"] == "admin" else (ft.Colors.BLUE if info["perfil"] == "editor" else ft.Colors.GREEN)
+                icone = ft.Icons.ADMIN_PANEL_SETTINGS if info["perfil"] == "admin" else (ft.Icons.ENGINEERING if info["perfil"] == "editor" else ft.Icons.VISIBILITY)
+                
+                card_user = ft.Container(
+                    content=ft.Row([
+                        ft.Icon(icone, color=cor_icone),
+                        ft.Column([
+                            ft.Text(info["nome"], weight=ft.FontWeight.BOLD, size=15),
+                            ft.Text(f"Login: {user} | Senha: {info['senha']}", size=11, color=ft.Colors.GREY_600)
+                        ], expand=True),
+                        ft.IconButton(ft.Icons.EDIT, icon_color=ft.Colors.BLUE_500, tooltip="Editar", on_click=lambda e, u=user: abrir_popup_editar(u)),
+                        ft.IconButton(ft.Icons.DELETE, icon_color=ft.Colors.RED_300, tooltip="Apagar", on_click=lambda e, u=user: confirmar_exclusao_user(u))
+                    ]),
+                    bgcolor=ft.Colors.GREY_100, padding=10, border_radius=8
+                )
+                lista_users.controls.append(card_user)
+            page.update()
+
+        campo_novo_login = ft.TextField(label="Novo Login (ex: joao)", expand=True)
+        campo_novo_nome = ft.TextField(label="Nome Completo", expand=True)
+        campo_nova_senha = ft.TextField(label="Senha", expand=True)
+        dropdown_perfil = ft.Dropdown(
+            options=[ft.dropdown.Option("admin"), ft.dropdown.Option("editor"), ft.dropdown.Option("visualizador")],
+            value="visualizador", width=120
+        )
+
+        def add_novo_usuario(e):
+            user = campo_novo_login.value.strip().replace(".", "").lower()
+            if user and user not in banco_dados["usuarios"]:
+                banco_dados["usuarios"][user] = {
+                    "senha": campo_nova_senha.value.strip(),
+                    "nome": campo_novo_nome.value.strip() or user,
+                    "perfil": dropdown_perfil.value
+                }
+                salvar_no_firebase(banco_dados)
+                campo_novo_login.value = ""
+                campo_novo_nome.value = ""
+                campo_nova_senha.value = ""
+                desenhar_lista_usuarios()
+
+        area_cadastro = ft.Column([
+            ft.Text("Cadastrar Novo Acesso", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_800),
+            campo_novo_nome,
+            ft.Row([campo_novo_login, campo_nova_senha]),
+            ft.Row([dropdown_perfil, ft.ElevatedButton("Gravar", on_click=add_novo_usuario, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE, expand=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+        ], spacing=10)
+
+        page.add(cabecalho, lista_users, ft.Divider(), area_cadastro)
+        desenhar_lista_usuarios()
 
     # ==========================================
     # TELA 1: CADASTRO E SELEÇÃO DE OBRAS
