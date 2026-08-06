@@ -431,6 +431,9 @@ def main(page: ft.Page):
             page.update()
 
 
+    # ==========================================
+    # TELA 6: LANÇAMENTO DE STATUS RÁPIDO 
+    # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.floating_action_button = None 
         page.controls.clear()
@@ -462,6 +465,22 @@ def main(page: ft.Page):
             value="Finalizado",
             expand=True
         )
+
+        # NOVO CAMPO DE OBSERVAÇÃO EM LOTE
+        campo_obs_lote = ft.TextField(
+            label="Observação (aplica a todos os selecionados)",
+            multiline=True,
+            visible=False
+        )
+
+        def ao_mudar_status_lote(e):
+            if dropdown_status.value in ["Não Conforme", "Em Andamento"]:
+                campo_obs_lote.visible = True
+            else:
+                campo_obs_lote.visible = False
+            page.update()
+
+        dropdown_status.on_change = ao_mudar_status_lote
 
         andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
         andar_inicial = andares_ordenados[0] if andares_ordenados else None
@@ -541,22 +560,37 @@ def main(page: ft.Page):
                 return
             
             status_escolhido = dropdown_status.value
+            obs_lote = campo_obs_lote.value.strip() # Pega o texto da observação global
             
             for apt_sel in aptos_selecionados:
-                if andar_alvo in banco_dados["obras"][obra] and apt_sel in banco_dados["obras"][obra][andar_alvo]:
-                    if tarefa not in banco_dados["obras"][obra][andar_alvo][apt_sel]:
-                        banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = {"status": status_escolhido, "obs": ""}
-                    else:
-                        banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["status"] = status_escolhido
-                        if status_escolhido == "Finalizado":
-                            banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa]["obs"] = ""
+                # Prevenção: garante que a estrutura existe
+                if andar_alvo not in banco_dados["obras"][obra]:
+                    banco_dados["obras"][obra][andar_alvo] = {}
+                if apt_sel not in banco_dados["obras"][obra][andar_alvo]:
+                    banco_dados["obras"][obra][andar_alvo][apt_sel] = {}
+
+                # Pega os dados atuais, se não existir, cria vazio
+                dados_atuais = banco_dados["obras"][obra][andar_alvo][apt_sel].get(tarefa, {"status": "Não Iniciado", "obs": ""})
+                
+                dados_atuais["status"] = status_escolhido
+                
+                # Aplica a lógica da observação no lote
+                if status_escolhido == "Finalizado":
+                    dados_atuais["obs"] = ""
+                elif status_escolhido in ["Não Conforme", "Em Andamento"]:
+                    if obs_lote: # Só subscreve se o utilizador digitou algo no lote
+                        dados_atuais["obs"] = obs_lote
+                
+                banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = dados_atuais
             
             registrar_historico("Status em Lote", f"[{obra}] - Aplicou '{status_escolhido}' na ativ. '{tarefa}' em {len(aptos_selecionados)} locais do {andar_alvo}º andar.")
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             snack = ft.SnackBar(ft.Text(f"✅ Status '{status_escolhido}' aplicado com sucesso!"), bgcolor=ft.Colors.GREEN_700)
             page.overlay.append(snack)
             snack.open = True
+            
             aptos_selecionados.clear()
+            campo_obs_lote.value = "" # Limpa o campo de observação
             desenhar_grid()
 
         botao_aplicar = ft.Container(
@@ -566,6 +600,7 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             ft.Row([dropdown_tarefa, dropdown_status]),
+            campo_obs_lote, # O novo campo é adicionado aqui!
             dropdown_andar,
             ft.Divider(),
             ft.Text("Toque nos apartamentos para atualizar:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
@@ -909,7 +944,7 @@ def main(page: ft.Page):
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
                     content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER) if texto_impresso else None,
-                    alignment=ft.Alignment.CENTER,
+                    alignment=ft.alignment.center,
                     padding=1
                 )
                 linha_andar.controls.append(quadrado)
