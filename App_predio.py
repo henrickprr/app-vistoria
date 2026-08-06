@@ -235,6 +235,7 @@ def main(page: ft.Page):
         ])
         
         lista_galeria = ft.ListView(expand=True, spacing=15)
+        
         tem_obs = False
         
         andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
@@ -268,7 +269,9 @@ def main(page: ft.Page):
         if not tem_obs:
             lista_galeria.controls.append(
                 ft.Container(
-                    content=ft.Row([ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([
+                        ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)
+                    ], alignment=ft.MainAxisAlignment.CENTER),
                     padding=40
                 )
             )
@@ -426,6 +429,7 @@ def main(page: ft.Page):
             )
             page.update()
 
+
     # ==========================================
     # TELA 6: LANÇAMENTO DE STATUS RÁPIDO LOTE
     # ==========================================
@@ -461,7 +465,6 @@ def main(page: ft.Page):
             expand=True
         )
 
-        # O NOVO CAMPO DE OBSERVAÇÃO PARA O LOTE
         campo_obs_lote = ft.TextField(
             label="Observação (aplica a todos os selecionados)",
             multiline=True,
@@ -558,14 +561,11 @@ def main(page: ft.Page):
             obs_lote = campo_obs_lote.value.strip()
             
             for apt_sel in aptos_selecionados:
-                # TRAVA DE SEGURANÇA: Só atualiza se o apartamento JÁ EXISTIR no andar alvo!
-                # Isso bloqueia a criação de apartamentos fantasmas como "101" noutros andares.
                 if andar_alvo in banco_dados["obras"][obra] and apt_sel in banco_dados["obras"][obra][andar_alvo]:
                     dados_atuais = banco_dados["obras"][obra][andar_alvo][apt_sel].get(tarefa, {"status": "Não Iniciado", "obs": ""})
                     
                     dados_atuais["status"] = status_escolhido
                     
-                    # Aplica a anotação para todos os selecionados
                     if status_escolhido == "Finalizado":
                         dados_atuais["obs"] = ""
                     elif status_escolhido in ["Não Conforme", "Em Andamento"]:
@@ -591,7 +591,7 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             ft.Row([dropdown_tarefa, dropdown_status]),
-            campo_obs_lote, # O campo fica visível aqui no layout
+            campo_obs_lote, 
             dropdown_andar,
             ft.Divider(),
             ft.Text("Toque nos apartamentos para atualizar:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
@@ -934,8 +934,7 @@ def main(page: ft.Page):
                     width=largura_celula, height=35, 
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
-                    content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER) if texto_impresso else None,
-                    alignment=ft.alignment.center,
+                    content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER) if texto_impresso else None,
                     padding=1
                 )
                 linha_andar.controls.append(quadrado)
@@ -1230,6 +1229,7 @@ def main(page: ft.Page):
                 )
             )
             
+            # BOTÃO DA GALERIA DE OBSERVAÇÕES
             botoes_menu.append(
                 ft.Container(
                     content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
