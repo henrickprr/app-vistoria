@@ -19,7 +19,6 @@ def main(page: ft.Page):
 
     # ==========================================
     # COFRE DE SESSÃO 100% SEGURO (PYTHON PURO)
-    # Variável local imune a atualizações do Flet
     # ==========================================
     estado_sessao = {
         "usuario": None,
@@ -86,9 +85,7 @@ def main(page: ft.Page):
         if precisa_migrar:
             salvar_no_firebase(banco_dados, mostrar_snack=False)
 
-        # ==========================================
         # MIGRAÇÃO INTELIGENTE DE NOMES DE TAREFAS
-        # ==========================================
         teve_alteracao_nome = False
         if "obras" in banco_dados:
             for obra_nome, andares in banco_dados["obras"].items():
@@ -238,7 +235,6 @@ def main(page: ft.Page):
         ])
         
         lista_galeria = ft.ListView(expand=True, spacing=15)
-        
         tem_obs = False
         
         andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
@@ -430,9 +426,8 @@ def main(page: ft.Page):
             )
             page.update()
 
-
     # ==========================================
-    # TELA 6: LANÇAMENTO DE STATUS RÁPIDO 
+    # TELA 6: LANÇAMENTO DE STATUS RÁPIDO LOTE
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.floating_action_button = None 
@@ -466,7 +461,7 @@ def main(page: ft.Page):
             expand=True
         )
 
-        # NOVO CAMPO DE OBSERVAÇÃO EM LOTE
+        # O NOVO CAMPO DE OBSERVAÇÃO PARA O LOTE
         campo_obs_lote = ft.TextField(
             label="Observação (aplica a todos os selecionados)",
             multiline=True,
@@ -560,28 +555,24 @@ def main(page: ft.Page):
                 return
             
             status_escolhido = dropdown_status.value
-            obs_lote = campo_obs_lote.value.strip() # Pega o texto da observação global
+            obs_lote = campo_obs_lote.value.strip()
             
             for apt_sel in aptos_selecionados:
-                # Prevenção: garante que a estrutura existe
-                if andar_alvo not in banco_dados["obras"][obra]:
-                    banco_dados["obras"][obra][andar_alvo] = {}
-                if apt_sel not in banco_dados["obras"][obra][andar_alvo]:
-                    banco_dados["obras"][obra][andar_alvo][apt_sel] = {}
-
-                # Pega os dados atuais, se não existir, cria vazio
-                dados_atuais = banco_dados["obras"][obra][andar_alvo][apt_sel].get(tarefa, {"status": "Não Iniciado", "obs": ""})
-                
-                dados_atuais["status"] = status_escolhido
-                
-                # Aplica a lógica da observação no lote
-                if status_escolhido == "Finalizado":
-                    dados_atuais["obs"] = ""
-                elif status_escolhido in ["Não Conforme", "Em Andamento"]:
-                    if obs_lote: # Só subscreve se o utilizador digitou algo no lote
-                        dados_atuais["obs"] = obs_lote
-                
-                banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = dados_atuais
+                # TRAVA DE SEGURANÇA: Só atualiza se o apartamento JÁ EXISTIR no andar alvo!
+                # Isso bloqueia a criação de apartamentos fantasmas como "101" noutros andares.
+                if andar_alvo in banco_dados["obras"][obra] and apt_sel in banco_dados["obras"][obra][andar_alvo]:
+                    dados_atuais = banco_dados["obras"][obra][andar_alvo][apt_sel].get(tarefa, {"status": "Não Iniciado", "obs": ""})
+                    
+                    dados_atuais["status"] = status_escolhido
+                    
+                    # Aplica a anotação para todos os selecionados
+                    if status_escolhido == "Finalizado":
+                        dados_atuais["obs"] = ""
+                    elif status_escolhido in ["Não Conforme", "Em Andamento"]:
+                        if obs_lote: 
+                            dados_atuais["obs"] = obs_lote
+                    
+                    banco_dados["obras"][obra][andar_alvo][apt_sel][tarefa] = dados_atuais
             
             registrar_historico("Status em Lote", f"[{obra}] - Aplicou '{status_escolhido}' na ativ. '{tarefa}' em {len(aptos_selecionados)} locais do {andar_alvo}º andar.")
             salvar_no_firebase(banco_dados, mostrar_snack=False)
@@ -590,7 +581,7 @@ def main(page: ft.Page):
             snack.open = True
             
             aptos_selecionados.clear()
-            campo_obs_lote.value = "" # Limpa o campo de observação
+            campo_obs_lote.value = "" 
             desenhar_grid()
 
         botao_aplicar = ft.Container(
@@ -600,7 +591,7 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             ft.Row([dropdown_tarefa, dropdown_status]),
-            campo_obs_lote, # O novo campo é adicionado aqui!
+            campo_obs_lote, # O campo fica visível aqui no layout
             dropdown_andar,
             ft.Divider(),
             ft.Text("Toque nos apartamentos para atualizar:", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
@@ -1045,7 +1036,6 @@ def main(page: ft.Page):
             def salvar_popup(e):
                 novo_status = menu_dropdown.value
                 
-                # Se mudou para Finalizado, limpa as anotações antigas
                 if novo_status == "Finalizado":
                     dados_atuais["obs"] = ""
                 else:
@@ -1240,7 +1230,6 @@ def main(page: ft.Page):
                 )
             )
             
-            # BOTÃO DA GALERIA DE OBSERVAÇÕES
             botoes_menu.append(
                 ft.Container(
                     content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
