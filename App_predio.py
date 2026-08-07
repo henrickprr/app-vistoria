@@ -269,7 +269,9 @@ def main(page: ft.Page):
         if not tem_obs:
             lista_galeria.controls.append(
                 ft.Container(
-                    content=ft.Row([ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([
+                        ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)
+                    ], alignment=ft.MainAxisAlignment.CENTER),
                     padding=40
                 )
             )
@@ -277,7 +279,9 @@ def main(page: ft.Page):
         page.add(cabecalho, lista_galeria)
         page.update()
 
-
+    # ==========================================
+    # NOVO PAINEL DE MÉTRICAS COM 3 ABAS
+    # ==========================================
     def abrir_tela_dashboard(obra):
         page.floating_action_button = None 
         page.controls.clear()
@@ -289,42 +293,55 @@ def main(page: ft.Page):
         ])
 
         try:
-            total_tarefas = 0
-            total_finalizado = 0
-            total_andamento = 0
-            total_conforme = 0
-            total_existente = 0
-
+            stats_geral = {"total": 0, "finalizado": 0, "andamento": 0, "conforme": 0, "existente": 0}
             stats_atividade = {}
+            stats_andar = {}
+            stats_apto = {}
 
             if obra in banco_dados["obras"]:
                 for andar, apartamentos in banco_dados["obras"][obra].items():
-                    if isinstance(apartamentos, dict):  
+                    if isinstance(apartamentos, dict):
+                        if andar not in stats_andar:
+                            stats_andar[andar] = {"total": 0, "finalizado": 0}
+                        if andar not in stats_apto:
+                            stats_apto[andar] = {}
+
                         for apto, atividades in apartamentos.items():
-                            if isinstance(atividades, dict):  
+                            if isinstance(atividades, dict):
+                                if apto not in stats_apto[andar]:
+                                    stats_apto[andar][apto] = {"total": 0, "finalizado": 0}
+
                                 for atividade, dados in atividades.items():
-                                    if isinstance(dados, dict):  
+                                    if isinstance(dados, dict):
                                         status = dados.get("status", "Não Iniciado")
                                         
+                                        # Atualiza Geral
+                                        stats_geral["total"] += 1
+                                        if status == "Finalizado": stats_geral["finalizado"] += 1
+                                        elif status == "Existente": stats_geral["existente"] += 1
+                                        elif status == "Em Andamento": stats_geral["andamento"] += 1
+                                        elif status == "Não Conforme": stats_geral["conforme"] += 1
+
+                                        # Atualiza Atividade
                                         if atividade not in stats_atividade:
                                             stats_atividade[atividade] = {"total": 0, "finalizado": 0}
-                                        
                                         stats_atividade[atividade]["total"] += 1
-                                        if status == "Finalizado" or status == "Existente":
+                                        if status in ["Finalizado", "Existente"]:
                                             stats_atividade[atividade]["finalizado"] += 1
-                                            if status == "Finalizado":
-                                                total_finalizado += 1
-                                            else:
-                                                total_existente += 1
-                                        elif status == "Em Andamento":
-                                            total_andamento += 1
-                                        elif status == "Não Conforme":
-                                            total_conforme += 1
-                                        
-                                        total_tarefas += 1
 
-            pct_geral = ((total_finalizado + total_existente) / total_tarefas) if total_tarefas > 0 else 0
+                                        # Atualiza Andar
+                                        stats_andar[andar]["total"] += 1
+                                        if status in ["Finalizado", "Existente"]:
+                                            stats_andar[andar]["finalizado"] += 1
 
+                                        # Atualiza Apto
+                                        stats_apto[andar][apto]["total"] += 1
+                                        if status in ["Finalizado", "Existente"]:
+                                            stats_apto[andar][apto]["finalizado"] += 1
+
+            pct_geral = ((stats_geral["finalizado"] + stats_geral["existente"]) / stats_geral["total"]) if stats_geral["total"] > 0 else 0
+
+            # --- CONSTRUÇÃO DA ABA 1: VISÃO GERAL ---
             card_progresso_geral = ft.Container(
                 content=ft.Column(
                     [
@@ -344,9 +361,7 @@ def main(page: ft.Page):
                     ], 
                     spacing=4
                 ),
-                bgcolor=ft.Colors.BLUE_50,
-                padding=16,
-                border_radius=10
+                bgcolor=ft.Colors.BLUE_50, padding=16, border_radius=10
             )
 
             grid_contadores = ft.Row(
@@ -354,28 +369,28 @@ def main(page: ft.Page):
                     ft.Container(
                         content=ft.Column([
                             ft.Text("OK", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700),
-                            ft.Text(str(total_finalizado), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
+                            ft.Text(str(stats_geral["finalizado"]), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.GREEN_700)
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=ft.Colors.GREEN_50, padding=10, border_radius=8, expand=True
                     ),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("ANDAM.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700),
-                            ft.Text(str(total_andamento), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
+                            ft.Text(str(stats_geral["andamento"]), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_700)
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=8, expand=True
                     ),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("PEND.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700),
-                            ft.Text(str(total_conforme), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700)
+                            ft.Text(str(stats_geral["conforme"]), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.RED_700)
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=ft.Colors.RED_50, padding=10, border_radius=8, expand=True
                     ),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("EXIST.", size=10, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700),
-                            ft.Text(str(total_existente), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700)
+                            ft.Text(str(stats_geral["existente"]), size=18, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_700)
                         ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
                         bgcolor=ft.Colors.ORANGE_50, padding=10, border_radius=8, expand=True
                     )
@@ -383,40 +398,115 @@ def main(page: ft.Page):
                 spacing=6
             )
 
-            lista_atividades_progresso = ft.ListView(expand=True, spacing=14)
-
+            lista_atividades_progresso = ft.ListView(spacing=14)
             for ativ, dados_at in sorted(stats_atividade.items()):
                 tot = dados_at["total"]
                 fin = dados_at["finalizado"]
                 pct_ativ = (fin / tot) if tot > 0 else 0
-                
-                item_progresso = ft.Column(
-                    [
-                        ft.Row(
-                            [
-                                ft.Text(ativ, size=13, weight=ft.FontWeight.W_600, color=ft.Colors.GREY_800, expand=True),
-                                ft.Text(f"{fin}/{tot} ({pct_ativ * 100:.0f}%)", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)
-                            ], 
-                            alignment=ft.MainAxisAlignment.SPACE_BETWEEN
-                        ),
-                        ft.Container(
-                            content=ft.ProgressBar(value=pct_ativ, color=ft.Colors.GREEN_500, bgcolor=ft.Colors.GREY_200),
-                            height=6
-                        )
-                    ], 
-                    spacing=3
+                lista_atividades_progresso.controls.append(
+                    ft.Column([
+                        ft.Row([
+                            ft.Text(ativ, size=13, weight=ft.FontWeight.W_600, color=ft.Colors.GREY_800, expand=True),
+                            ft.Text(f"{fin}/{tot} ({pct_ativ * 100:.0f}%)", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Container(content=ft.ProgressBar(value=pct_ativ, color=ft.Colors.GREEN_500, bgcolor=ft.Colors.GREY_200), height=6)
+                    ], spacing=3)
                 )
-                lista_atividades_progresso.controls.append(item_progresso)
 
-            page.add(
-                cabecalho,
-                card_progresso_geral,
-                ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-                grid_contadores,
-                ft.Divider(height=15, color=ft.Colors.TRANSPARENT),
-                ft.Text("EVOLUÇÃO POR ATIVIDADE", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
-                lista_atividades_progresso
+            tab_geral = ft.Tab(
+                text="Visão Geral",
+                content=ft.Container(
+                    content=ft.Column([
+                        card_progresso_geral,
+                        ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+                        grid_contadores,
+                        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                        ft.Text("EVOLUÇÃO POR ATIVIDADE", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                        lista_atividades_progresso
+                    ], scroll=ft.ScrollMode.AUTO),
+                    padding=10
+                )
             )
+
+            # --- CONSTRUÇÃO DA ABA 2: POR PAVIMENTO ---
+            lista_andares_progresso = ft.ListView(spacing=14)
+            for andar, dados_and in sorted(stats_andar.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 9999):
+                tot = dados_and["total"]
+                fin = dados_and["finalizado"]
+                pct = (fin / tot) if tot > 0 else 0
+                lista_andares_progresso.controls.append(
+                    ft.Column([
+                        ft.Row([
+                            ft.Text(f"{andar}º Pavimento", weight=ft.FontWeight.BOLD, color=ft.Colors.BLUE_900),
+                            ft.Text(f"{fin}/{tot} ({pct*100:.0f}%)", weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)
+                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ft.Container(content=ft.ProgressBar(value=pct, color=ft.Colors.BLUE_600, bgcolor=ft.Colors.GREY_200), height=6)
+                    ], spacing=3)
+                )
+
+            tab_andar = ft.Tab(
+                text="Por Andar",
+                content=ft.Container(
+                    content=ft.Column([
+                        ft.Text("EVOLUÇÃO DE CADA PAVIMENTO", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                        lista_andares_progresso
+                    ], scroll=ft.ScrollMode.AUTO),
+                    padding=10
+                )
+            )
+
+            # --- CONSTRUÇÃO DA ABA 3: POR APARTAMENTO ---
+            opcoes_andares = [ft.dropdown.Option(str(a), text=f"{a}º Pavimento") for a in sorted(stats_apto.keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)]
+            dropdown_andar_filtro = ft.Dropdown(label="Selecione o Pavimento", options=opcoes_andares)
+            lista_aptos_progresso = ft.ListView(spacing=14, expand=True)
+
+            def atualizar_lista_aptos(e):
+                lista_aptos_progresso.controls.clear()
+                andar_sel = dropdown_andar_filtro.value
+                if andar_sel and andar_sel in stats_apto:
+                    aptos = stats_apto[andar_sel]
+                    for apto, dados_ap in sorted(aptos.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 9999):
+                        tot = dados_ap["total"]
+                        fin = dados_ap["finalizado"]
+                        pct = (fin / tot) if tot > 0 else 0
+                        nome_apto = apto if apto == "Corredor" else f"Apto {apto}"
+                        lista_aptos_progresso.controls.append(
+                            ft.Column([
+                                ft.Row([
+                                    ft.Text(nome_apto, weight=ft.FontWeight.BOLD, color=ft.Colors.ORANGE_800),
+                                    ft.Text(f"{fin}/{tot} ({pct*100:.0f}%)", weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_700)
+                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ft.Container(content=ft.ProgressBar(value=pct, color=ft.Colors.ORANGE_500, bgcolor=ft.Colors.GREY_200), height=6)
+                            ], spacing=3)
+                        )
+                page.update()
+
+            dropdown_andar_filtro.on_change = atualizar_lista_aptos
+            if opcoes_andares:
+                dropdown_andar_filtro.value = opcoes_andares[0].key
+                atualizar_lista_aptos(None)
+
+            tab_apto = ft.Tab(
+                text="Por Cômodo",
+                content=ft.Container(
+                    content=ft.Column([
+                        dropdown_andar_filtro,
+                        ft.Text("EVOLUÇÃO DOS APARTAMENTOS", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600),
+                        lista_aptos_progresso
+                    ]),
+                    padding=10
+                )
+            )
+
+            # --- JUNTA AS ABAS ---
+            abas = ft.Tabs(
+                selected_index=0,
+                animation_duration=300,
+                tabs=[tab_geral, tab_andar, tab_apto],
+                expand=True
+            )
+
+            page.add(cabecalho, abas)
             page.update()
 
         except Exception as e:
@@ -426,7 +516,6 @@ def main(page: ft.Page):
                 ft.Text(f"Log: {str(e)}", color=ft.Colors.GREY_600, size=10)
             )
             page.update()
-
 
     # ==========================================
     # TELA 6: LANÇAMENTO DE STATUS RÁPIDO LOTE
@@ -625,7 +714,6 @@ def main(page: ft.Page):
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
         dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade", options=opcoes_tarefas, expand=True)
 
-        # NOVO FILTRO DE CÔMODO
         lista_opcoes_local = ["Todos os Locais"] + sorted(list(locais_unicos))
         opcoes_locais_dropdown = [ft.dropdown.Option(l) for l in lista_opcoes_local]
         dropdown_filtro_local = ft.Dropdown(
@@ -750,7 +838,6 @@ def main(page: ft.Page):
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
         dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade a Excluir", options=opcoes_tarefas, expand=True)
 
-        # NOVO FILTRO DE CÔMODO
         lista_opcoes_local = ["Todos os Locais"] + sorted(list(locais_unicos))
         opcoes_locais_dropdown = [ft.dropdown.Option(l) for l in lista_opcoes_local]
         dropdown_filtro_local = ft.Dropdown(
@@ -966,7 +1053,6 @@ def main(page: ft.Page):
                 cor_quadrado = get_cor_status(status_atual)
                 largura_celula = 45 if local_str == "Corredor" else 35
                 
-                # Flet 100% blindado com Rows e Columns
                 quadrado = ft.Container(
                     width=largura_celula, height=35, 
                     bgcolor=cor_quadrado, border_radius=4, 
