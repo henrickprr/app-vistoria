@@ -253,7 +253,7 @@ def main(page: ft.Page):
                             ft.Row([
                                 ft.Text(f"{andar}º Andar - Apto {apto}", weight="bold", size=16),
                                 ft.Text(status, color=cor_borda, weight="bold", size=12)
-                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                            ], alignment="spaceBetween"),
                             ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight="bold"),
                             ft.Divider(),
                             ft.Text(f"📝 Obs:\n{obs}", size=14)
@@ -271,7 +271,7 @@ def main(page: ft.Page):
                 ft.Container(
                     content=ft.Row([
                         ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align="center", color=ft.Colors.GREY_500)
-                    ], alignment=ft.MainAxisAlignment.CENTER),
+                    ], alignment="center"),
                     padding=40
                 )
             )
@@ -280,8 +280,8 @@ def main(page: ft.Page):
         page.update()
 
     # ==========================================
-    # NOVO PAINEL DE MÉTRICAS COM 3 ABAS DINAÂMICAS
-    # Correção Aplicada: Usar 'tab_content' em vez de 'text' para 100% compatibilidade
+    # NOVO PAINEL DE MÉTRICAS (SISTEMA DE ABAS BLINDADO)
+    # Totalmente reconstruído sem usar a ferramenta instável "ft.Tabs"
     # ==========================================
     def abrir_tela_dashboard(obra):
         page.floating_action_button = None 
@@ -342,7 +342,7 @@ def main(page: ft.Page):
 
             pct_geral = ((stats_geral["finalizado"] + stats_geral["existente"]) / stats_geral["total"]) if stats_geral["total"] > 0 else 0
 
-            # --- CONSTRUÇÃO DA ABA 1: VISÃO GERAL ---
+            # --- CONTEÚDO VISÃO GERAL ---
             card_progresso_geral = ft.Container(
                 content=ft.Column(
                     [
@@ -352,8 +352,8 @@ def main(page: ft.Page):
                                 ft.Text(f"{pct_geral * 100:.1f}%", size=34, weight="bold", color=ft.Colors.BLUE_800),
                                 ft.Text("de metas atingidas", size=13, color=ft.Colors.GREY_600)
                             ], 
-                            alignment=ft.MainAxisAlignment.START, 
-                            vertical_alignment=ft.CrossAxisAlignment.END 
+                            alignment="start", 
+                            vertical_alignment="end"
                         ),
                         ft.Container(
                             content=ft.ProgressBar(value=pct_geral, color=ft.Colors.BLUE_700, bgcolor=ft.Colors.GREY_200),
@@ -371,28 +371,28 @@ def main(page: ft.Page):
                         content=ft.Column([
                             ft.Text("OK", size=10, weight="bold", color=ft.Colors.GREEN_700),
                             ft.Text(str(stats_geral["finalizado"]), size=18, weight="bold", color=ft.Colors.GREEN_700)
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ], horizontal_alignment="center"),
                         bgcolor=ft.Colors.GREEN_50, padding=10, border_radius=8, expand=True
                     ),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("ANDAM.", size=10, weight="bold", color=ft.Colors.BLUE_700),
                             ft.Text(str(stats_geral["andamento"]), size=18, weight="bold", color=ft.Colors.BLUE_700)
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ], horizontal_alignment="center"),
                         bgcolor=ft.Colors.BLUE_50, padding=10, border_radius=8, expand=True
                     ),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("PEND.", size=10, weight="bold", color=ft.Colors.RED_700),
                             ft.Text(str(stats_geral["conforme"]), size=18, weight="bold", color=ft.Colors.RED_700)
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ], horizontal_alignment="center"),
                         bgcolor=ft.Colors.RED_50, padding=10, border_radius=8, expand=True
                     ),
                     ft.Container(
                         content=ft.Column([
                             ft.Text("EXIST.", size=10, weight="bold", color=ft.Colors.ORANGE_700),
                             ft.Text(str(stats_geral["existente"]), size=18, weight="bold", color=ft.Colors.ORANGE_700)
-                        ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        ], horizontal_alignment="center"),
                         bgcolor=ft.Colors.ORANGE_50, padding=10, border_radius=8, expand=True
                     )
                 ], 
@@ -409,27 +409,25 @@ def main(page: ft.Page):
                         ft.Row([
                             ft.Text(ativ, size=13, weight="w600", color=ft.Colors.GREY_800, expand=True),
                             ft.Text(f"{fin}/{tot} ({pct_ativ * 100:.0f}%)", size=12, weight="bold", color=ft.Colors.GREY_700)
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ], alignment="spaceBetween"),
                         ft.Container(content=ft.ProgressBar(value=pct_ativ, color=ft.Colors.GREEN_500, bgcolor=ft.Colors.GREY_200), height=6)
                     ], spacing=3)
                 )
 
-            tab_geral = ft.Tab(
-                tab_content=ft.Text("Visão Geral", weight="bold"),
-                content=ft.Container(
-                    content=ft.Column([
-                        card_progresso_geral,
-                        ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
-                        grid_contadores,
-                        ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
-                        ft.Text("EVOLUÇÃO POR ATIVIDADE", size=12, weight="bold", color=ft.Colors.GREY_600),
-                        lista_atividades_progresso
-                    ], scroll=ft.ScrollMode.AUTO),
-                    padding=10
-                )
+            view_geral = ft.Container(
+                content=ft.Column([
+                    card_progresso_geral,
+                    ft.Divider(height=5, color=ft.Colors.TRANSPARENT),
+                    grid_contadores,
+                    ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                    ft.Text("EVOLUÇÃO POR ATIVIDADE", size=12, weight="bold", color=ft.Colors.GREY_600),
+                    lista_atividades_progresso
+                ], scroll=ft.ScrollMode.AUTO, expand=True),
+                expand=True,
+                visible=True
             )
 
-            # --- CONSTRUÇÃO DA ABA 2: POR PAVIMENTO ---
+            # --- CONTEÚDO POR PAVIMENTO ---
             lista_andares_progresso = ft.ListView(spacing=14)
             for andar, dados_and in sorted(stats_andar.items(), key=lambda x: int(x[0]) if str(x[0]).isdigit() else 9999):
                 tot = dados_and["total"]
@@ -440,23 +438,21 @@ def main(page: ft.Page):
                         ft.Row([
                             ft.Text(f"{andar}º Pavimento", weight="bold", color=ft.Colors.BLUE_900),
                             ft.Text(f"{fin}/{tot} ({pct*100:.0f}%)", weight="bold", color=ft.Colors.GREY_700)
-                        ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                        ], alignment="spaceBetween"),
                         ft.Container(content=ft.ProgressBar(value=pct, color=ft.Colors.BLUE_600, bgcolor=ft.Colors.GREY_200), height=6)
                     ], spacing=3)
                 )
 
-            tab_andar = ft.Tab(
-                tab_content=ft.Text("Por Andar", weight="bold"),
-                content=ft.Container(
-                    content=ft.Column([
-                        ft.Text("EVOLUÇÃO DE CADA PAVIMENTO", size=12, weight="bold", color=ft.Colors.GREY_600),
-                        lista_andares_progresso
-                    ], scroll=ft.ScrollMode.AUTO),
-                    padding=10
-                )
+            view_andar = ft.Container(
+                content=ft.Column([
+                    ft.Text("EVOLUÇÃO DE CADA PAVIMENTO", size=12, weight="bold", color=ft.Colors.GREY_600),
+                    lista_andares_progresso
+                ], scroll=ft.ScrollMode.AUTO, expand=True),
+                expand=True,
+                visible=False
             )
 
-            # --- CONSTRUÇÃO DA ABA 3: POR APARTAMENTO ---
+            # --- CONTEÚDO POR CÔMODO/APARTAMENTO ---
             opcoes_andares = [ft.dropdown.Option(str(a), text=f"{a}º Pavimento") for a in sorted(stats_apto.keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)]
             dropdown_andar_filtro = ft.Dropdown(label="Selecione o Pavimento", options=opcoes_andares)
             lista_aptos_progresso = ft.ListView(spacing=14, expand=True)
@@ -476,7 +472,7 @@ def main(page: ft.Page):
                                 ft.Row([
                                     ft.Text(nome_apto, weight="bold", color=ft.Colors.ORANGE_800),
                                     ft.Text(f"{fin}/{tot} ({pct*100:.0f}%)", weight="bold", color=ft.Colors.GREY_700)
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ], alignment="spaceBetween"),
                                 ft.Container(content=ft.ProgressBar(value=pct, color=ft.Colors.ORANGE_500, bgcolor=ft.Colors.GREY_200), height=6)
                             ], spacing=3)
                         )
@@ -487,26 +483,43 @@ def main(page: ft.Page):
                 dropdown_andar_filtro.value = opcoes_andares[0].key
                 atualizar_lista_aptos(None)
 
-            tab_apto = ft.Tab(
-                tab_content=ft.Text("Por Cômodo", weight="bold"),
-                content=ft.Container(
-                    content=ft.Column([
-                        dropdown_andar_filtro,
-                        ft.Text("EVOLUÇÃO DOS APARTAMENTOS", size=12, weight="bold", color=ft.Colors.GREY_600),
-                        lista_aptos_progresso
-                    ]),
-                    padding=10
-                )
+            view_apto = ft.Container(
+                content=ft.Column([
+                    dropdown_andar_filtro,
+                    ft.Text("EVOLUÇÃO DOS CÔMODOS", size=12, weight="bold", color=ft.Colors.GREY_600),
+                    lista_aptos_progresso
+                ], scroll=ft.ScrollMode.AUTO, expand=True),
+                expand=True,
+                visible=False
             )
 
-            # --- JUNTA AS ABAS ---
-            abas = ft.Tabs(
-                selected_index=0,
-                tabs=[tab_geral, tab_andar, tab_apto],
-                expand=True
-            )
+            # --- SISTEMA DE NAVEGAÇÃO CUSTOMIZADO (SUBSTITUI O TABS) ---
+            btn_geral = ft.ElevatedButton("Geral", on_click=lambda e: mudar_aba("geral"), style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE), expand=True)
+            btn_andar = ft.ElevatedButton("Andar", on_click=lambda e: mudar_aba("andar"), style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=ft.Colors.BLACK87), expand=True)
+            btn_apto = ft.ElevatedButton("Cômodo", on_click=lambda e: mudar_aba("apto"), style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=ft.Colors.BLACK87), expand=True)
 
-            page.add(cabecalho, abas)
+            def mudar_aba(aba):
+                view_geral.visible = (aba == "geral")
+                view_andar.visible = (aba == "andar")
+                view_apto.visible = (aba == "apto")
+
+                btn_geral.style = ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700 if aba == "geral" else ft.Colors.GREY_200, color=ft.Colors.WHITE if aba == "geral" else ft.Colors.BLACK87)
+                btn_andar.style = ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700 if aba == "andar" else ft.Colors.GREY_200, color=ft.Colors.WHITE if aba == "andar" else ft.Colors.BLACK87)
+                btn_apto.style = ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700 if aba == "apto" else ft.Colors.GREY_200, color=ft.Colors.WHITE if aba == "apto" else ft.Colors.BLACK87)
+
+                page.update()
+
+            menu_abas = ft.Row([btn_geral, btn_andar, btn_apto], alignment="center", spacing=5)
+
+            conteudo_principal = ft.Column([
+                menu_abas,
+                ft.Divider(height=10, color=ft.Colors.TRANSPARENT),
+                view_geral,
+                view_andar,
+                view_apto
+            ], expand=True)
+
+            page.add(cabecalho, conteudo_principal)
             page.update()
 
         except Exception as e:
@@ -610,8 +623,8 @@ def main(page: ft.Page):
                             ft.Icon(icone, color=ft.Colors.WHITE, size=24) if icone else ft.Container(height=24),
                             ft.Text(apto, size=18, weight="bold", color=ft.Colors.WHITE)
                         ], 
-                        alignment=ft.MainAxisAlignment.CENTER, 
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                        alignment="center", 
+                        horizontal_alignment="center"
                     ),
                     bgcolor=cor_fundo, 
                     border_radius=8, 
@@ -672,7 +685,7 @@ def main(page: ft.Page):
             desenhar_grid()
 
         botao_aplicar = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("ATUALIZAR APARTAMENTOS", color=ft.Colors.WHITE, weight="bold", size=15)], alignment=ft.MainAxisAlignment.CENTER),
+            content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("ATUALIZAR APARTAMENTOS", color=ft.Colors.WHITE, weight="bold", size=15)], alignment="center"),
             bgcolor=ft.Colors.ORANGE_700, padding=15, border_radius=8, ink=True, on_click=aplicar_status_lote
         )
 
@@ -797,7 +810,7 @@ def main(page: ft.Page):
             page.update()
 
         botao_aplicar = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("DISTRIBUIR TAREFA", color=ft.Colors.WHITE, weight="bold", size=15)], alignment=ft.MainAxisAlignment.CENTER),
+            content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("DISTRIBUIR TAREFA", color=ft.Colors.WHITE, weight="bold", size=15)], alignment="center"),
             bgcolor=ft.Colors.PURPLE_700, padding=15, border_radius=8, ink=True, on_click=aplicar_tarefa_lote
         )
 
@@ -806,7 +819,7 @@ def main(page: ft.Page):
             dropdown_filtro_local,
             ft.Text("A nova tarefa será criada como 'Não Iniciado'.", size=11, color=ft.Colors.GREY_600),
             ft.Divider(),
-            ft.Row([ft.Text("ONDE ELA DEVE APARECER?", size=12, weight="bold", color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Row([ft.Text("ONDE ELA DEVE APARECER?", size=12, weight="bold", color=ft.Colors.GREY_600), btn_selecionar_todos], alignment="spaceBetween"),
             ft.Container(content=grid_andares, expand=True)
         ], expand=True)
 
@@ -901,7 +914,7 @@ def main(page: ft.Page):
             page.update()
 
         botao_aplicar = ft.Container(
-            content=ft.Row([ft.Icon(ft.Icons.DELETE_FOREVER, color=ft.Colors.WHITE), ft.Text("REMOVER ATIVIDADE DO ESCOPO", color=ft.Colors.WHITE, weight="bold", size=14)], alignment=ft.MainAxisAlignment.CENTER),
+            content=ft.Row([ft.Icon(ft.Icons.DELETE_FOREVER, color=ft.Colors.WHITE), ft.Text("REMOVER ATIVIDADE DO ESCOPO", color=ft.Colors.WHITE, weight="bold", size=14)], alignment="center"),
             bgcolor=ft.Colors.RED_800, padding=15, border_radius=8, ink=True, on_click=aplicar_remocao_lote
         )
 
@@ -910,7 +923,7 @@ def main(page: ft.Page):
             dropdown_filtro_local,
             ft.Text("Atenção: Esta ação excluirá permanentemente a tarefa do local selecionado.", size=11, color=ft.Colors.RED_500),
             ft.Divider(),
-            ft.Row([ft.Text("REMOVER DE QUAIS PAVIMENTOS?", size=12, weight="bold", color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+            ft.Row([ft.Text("REMOVER DE QUAIS PAVIMENTOS?", size=12, weight="bold", color=ft.Colors.GREY_600), btn_selecionar_todos], alignment="spaceBetween"),
             ft.Container(content=grid_andares, expand=True)
         ], expand=True)
 
@@ -932,7 +945,7 @@ def main(page: ft.Page):
 
         andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
-        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment=ft.CrossAxisAlignment.CENTER)
+        bloco_botoes_acao = ft.Column(spacing=10, horizontal_alignment="center")
 
         def acionar_pdf(e):
             try:
@@ -964,7 +977,7 @@ def main(page: ft.Page):
                             ft.Icon(ft.Icons.DOWNLOAD, color=ft.Colors.WHITE), 
                             ft.Text("CLIQUE AQUI PARA ABRIR O PDF", color=ft.Colors.WHITE, weight="bold", size=15)
                         ], 
-                        alignment=ft.MainAxisAlignment.CENTER
+                        alignment="center"
                     ),
                     bgcolor=ft.Colors.BLUE_600,
                     padding=15,
@@ -994,7 +1007,7 @@ def main(page: ft.Page):
                     ft.Icon(ft.Icons.PICTURE_AS_PDF, color=ft.Colors.WHITE), 
                     ft.Text("Gerar PDF (A4)", weight="bold", color=ft.Colors.WHITE)
                 ], 
-                alignment=ft.MainAxisAlignment.CENTER
+                alignment="center"
             ),
             bgcolor=ft.Colors.RED_700, 
             padding=12, 
@@ -1011,7 +1024,7 @@ def main(page: ft.Page):
             ft.Container(width=15, height=15, bgcolor=ft.Colors.BLUE_500, border_radius=3), ft.Text("Andam.", size=12),
             ft.Container(width=15, height=15, bgcolor=ft.Colors.ORANGE_500, border_radius=3), ft.Text("Existente", size=12),
             ft.Container(width=15, height=15, bgcolor=ft.Colors.GREY_400, border_radius=3), ft.Text("Não Iniciado", size=12),
-        ], alignment=ft.MainAxisAlignment.CENTER, spacing=8)
+        ], alignment="center", spacing=8)
 
         tabela = ft.Column(spacing=5)
         
@@ -1021,20 +1034,20 @@ def main(page: ft.Page):
             ft.Container(width=60), 
             ft.Container(
                 width=largura_celulas_horizontais, 
-                content=ft.Row([ft.Text("APARTAMENTOS E LOCAIS →", weight="bold", size=11, color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER),
+                content=ft.Row([ft.Text("APARTAMENTOS E LOCAIS →", weight="bold", size=11, color=ft.Colors.BLUE_900)], alignment="center"),
                 bgcolor=ft.Colors.BLUE_50, border_radius=4, padding=2
             )
         ], spacing=5)
         tabela.controls.append(linha_super_header)
 
-        linha_header = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text("Andar ↓", weight="bold", color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.START))], spacing=5)
+        linha_header = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text("Andar ↓", weight="bold", color=ft.Colors.GREY_700)], alignment="start"))], spacing=5)
         for apto_num in range(1, 15):
-            linha_header.controls.append(ft.Container(width=35, content=ft.Row([ft.Text(f"{apto_num:02d}", weight="bold", size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
-        linha_header.controls.append(ft.Container(width=45, content=ft.Row([ft.Text("Corr.", weight="bold", size=12, color=ft.Colors.GREY_700)], alignment=ft.MainAxisAlignment.CENTER)))
+            linha_header.controls.append(ft.Container(width=35, content=ft.Row([ft.Text(f"{apto_num:02d}", weight="bold", size=12, color=ft.Colors.GREY_700)], alignment="center")))
+        linha_header.controls.append(ft.Container(width=45, content=ft.Row([ft.Text("Corr.", weight="bold", size=12, color=ft.Colors.GREY_700)], alignment="center")))
         tabela.controls.append(linha_header)
 
         for andar in andares_ordenados:
-            linha_andar = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text(f"{andar}º", weight="bold")], alignment=ft.MainAxisAlignment.START))], spacing=5)
+            linha_andar = ft.Row([ft.Container(width=60, content=ft.Row([ft.Text(f"{andar}º", weight="bold")], alignment="start"))], spacing=5)
             
             locais_matriz = [f"{andar}{apto_num:02d}" for apto_num in range(1, 15)] + ["Corredor"]
             
@@ -1058,8 +1071,8 @@ def main(page: ft.Page):
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
                     content=ft.Column(
-                        [ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold", text_align="center")], alignment=ft.MainAxisAlignment.CENTER)],
-                        alignment=ft.MainAxisAlignment.CENTER
+                        [ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight="bold", text_align="center")], alignment="center")],
+                        alignment="center"
                     ) if texto_impresso else None,
                     padding=1
                 )
@@ -1256,8 +1269,8 @@ def main(page: ft.Page):
                             ft.Text(value=numero_apto, size=tamanho_fonte, weight="w500", color=ft.Colors.WHITE), 
                             ft.Icon(ft.Icons.APPS, color=ft.Colors.WHITE70, size=24)
                         ], 
-                        alignment=ft.MainAxisAlignment.CENTER, 
-                        horizontal_alignment=ft.CrossAxisAlignment.CENTER
+                        alignment="center", 
+                        horizontal_alignment="center"
                     ), 
                     bgcolor=cor_fundo, 
                     border_radius=10, 
@@ -1342,20 +1355,20 @@ def main(page: ft.Page):
 
             botoes_menu.append(
                 ft.Container(
-                    content=ft.Column([ft.Icon(ft.Icons.GRID_ON, size=35, color=ft.Colors.WHITE), ft.Text("Relatório", color=ft.Colors.WHITE, size=11, weight="bold")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    content=ft.Column([ft.Icon(ft.Icons.GRID_ON, size=35, color=ft.Colors.WHITE), ft.Text("Relatório", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
                     bgcolor=ft.Colors.BLUE_800, border_radius=12, ink=True, on_click=lambda _: acao(iniciar_relatorio)
                 )
             )
             botoes_menu.append(
                 ft.Container(
-                    content=ft.Column([ft.Icon(ft.Icons.BAR_CHART, size=35, color=ft.Colors.WHITE), ft.Text("Painel", color=ft.Colors.WHITE, size=11, weight="bold")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                    content=ft.Column([ft.Icon(ft.Icons.BAR_CHART, size=35, color=ft.Colors.WHITE), ft.Text("Painel", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
                     bgcolor=ft.Colors.TEAL_700, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_dashboard(obra))
                 )
             )
             
             botoes_menu.append(
                 ft.Container(
-                    content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                    content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment="center", horizontal_alignment="center", spacing=2),
                     bgcolor=ft.Colors.INDIGO_600, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_observacoes(obra))
                 )
             )
@@ -1363,19 +1376,19 @@ def main(page: ft.Page):
             if perfil_user in ["admin", "editor"]:
                 botoes_menu.append(
                     ft.Container(
-                        content=ft.Column([ft.Icon(ft.Icons.CHECKLIST, size=35, color=ft.Colors.WHITE), ft.Text("Status\nRápido", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
+                        content=ft.Column([ft.Icon(ft.Icons.CHECKLIST, size=35, color=ft.Colors.WHITE), ft.Text("Status\nRápido", color=ft.Colors.WHITE, size=11, weight="bold", text_align="center")], alignment="center", horizontal_alignment="center", spacing=2),
                         bgcolor=ft.Colors.ORANGE_700, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_lancamento_status(obra))
                     )
                 )
                 botoes_menu.append(
                     ft.Container(
-                        content=ft.Column([ft.Icon(ft.Icons.LIBRARY_ADD, size=35, color=ft.Colors.WHITE), ft.Text("+ Tarefa", color=ft.Colors.WHITE, size=11, weight="bold")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        content=ft.Column([ft.Icon(ft.Icons.LIBRARY_ADD, size=35, color=ft.Colors.WHITE), ft.Text("+ Tarefa", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
                         bgcolor=ft.Colors.PURPLE_700, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_lancamento_tarefas(obra))
                     )
                 )
                 botoes_menu.append(
                     ft.Container(
-                        content=ft.Column([ft.Icon(ft.Icons.DELETE_SWEEP, size=35, color=ft.Colors.WHITE), ft.Text("- Tarefa", color=ft.Colors.WHITE, size=11, weight="bold")], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+                        content=ft.Column([ft.Icon(ft.Icons.DELETE_SWEEP, size=35, color=ft.Colors.WHITE), ft.Text("- Tarefa", color=ft.Colors.WHITE, size=11, weight="bold")], alignment="center", horizontal_alignment="center"),
                         bgcolor=ft.Colors.RED_800, border_radius=12, ink=True, on_click=lambda _: acao(lambda: abrir_tela_remover_tarefas(obra))
                     )
                 )
@@ -1421,7 +1434,7 @@ def main(page: ft.Page):
             andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
             for andar in andares_ordenados:
                 botao_andar = ft.Container(
-                    content=ft.Row([ft.Text(f"{andar}º Pavimento", size=18, weight="w600", color=ft.Colors.BLUE_900)], alignment=ft.MainAxisAlignment.CENTER), 
+                    content=ft.Row([ft.Text(f"{andar}º Pavimento", size=18, weight="w600", color=ft.Colors.BLUE_900)], alignment="center"), 
                     height=60, 
                     bgcolor=ft.Colors.GREY_100, 
                     border_radius=8, 
@@ -1490,7 +1503,7 @@ def main(page: ft.Page):
                                 ft.Row([
                                     ft.Text(f"{data_str} - {user_str.upper()}", size=11, weight="bold", color=ft.Colors.GREY_600),
                                     ft.Text(acao_str, size=11, weight="bold", color=cor_acao),
-                                ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
+                                ], alignment="spaceBetween"),
                                 ft.Text(detalhes_str, size=13, color=ft.Colors.BLACK87)
                             ]),
                             bgcolor=ft.Colors.GREY_100, padding=12, border_radius=8
@@ -1617,7 +1630,7 @@ def main(page: ft.Page):
             ft.Text("Cadastrar Novo Acesso", weight="bold", color=ft.Colors.BLUE_800),
             campo_novo_nome,
             ft.Row([campo_novo_login, campo_nova_senha]),
-            ft.Row([dropdown_perfil, ft.ElevatedButton("Gravar", on_click=add_novo_usuario, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE, expand=True)], alignment=ft.MainAxisAlignment.SPACE_BETWEEN)
+            ft.Row([dropdown_perfil, ft.ElevatedButton("Gravar", on_click=add_novo_usuario, bgcolor=ft.Colors.GREEN_600, color=ft.Colors.WHITE, expand=True)], alignment="spaceBetween")
         ], spacing=10)
 
         page.add(cabecalho, lista_users, ft.Divider(), area_cadastro)
@@ -1677,7 +1690,7 @@ def main(page: ft.Page):
             lista_obras.controls.clear()
             for obra in sorted(banco_dados["obras"].keys()):
                 botao_obra = ft.Container(
-                    content=ft.Row([ft.Icon(ft.Icons.DOMAIN, color=ft.Colors.WHITE, size=28), ft.Text(obra, size=20, weight="bold", color=ft.Colors.WHITE)], alignment=ft.MainAxisAlignment.CENTER, spacing=15), 
+                    content=ft.Row([ft.Icon(ft.Icons.DOMAIN, color=ft.Colors.WHITE, size=28), ft.Text(obra, size=20, weight="bold", color=ft.Colors.WHITE)], alignment="center", spacing=15), 
                     height=80, 
                     bgcolor=ft.Colors.BLUE_600, 
                     border_radius=12, 
@@ -1753,7 +1766,7 @@ def main(page: ft.Page):
                 campo_senha,
                 chk_manter,
                 btn_entrar
-            ], horizontal_alignment=ft.CrossAxisAlignment.CENTER),
+            ], horizontal_alignment="center"),
             padding=30, border_radius=15, bgcolor=ft.Colors.GREY_100, width=320
         )
         page.add(caixa_login)
