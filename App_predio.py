@@ -269,9 +269,7 @@ def main(page: ft.Page):
         if not tem_obs:
             lista_galeria.controls.append(
                 ft.Container(
-                    content=ft.Row([
-                        ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)
-                    ], alignment=ft.MainAxisAlignment.CENTER),
+                    content=ft.Row([ft.Text("Nenhuma pendência ou anotação encontrada nesta obra.", text_align=ft.TextAlign.CENTER, color=ft.Colors.GREY_500)], alignment=ft.MainAxisAlignment.CENTER),
                     padding=40
                 )
             )
@@ -602,6 +600,9 @@ def main(page: ft.Page):
         desenhar_grid()
 
 
+    # ==========================================
+    # FERRAMENTA B: DISTRIBUIR NOVA TAREFA (LOTE)
+    # ==========================================
     def abrir_tela_lancamento_tarefas(obra):
         page.floating_action_button = None 
         page.controls.clear()
@@ -613,13 +614,25 @@ def main(page: ft.Page):
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
+        locais_unicos = set()
+        
         for and_dados in banco_dados["obras"][obra].values():
-            for ap_dados in and_dados.values():
+            for ap_nome, ap_dados in and_dados.items():
+                locais_unicos.add(ap_nome)
                 for s in ap_dados.keys():
                     servicos_disponiveis.add(s)
         
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
         dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade", options=opcoes_tarefas, expand=True)
+
+        # NOVO FILTRO DE CÔMODO
+        lista_opcoes_local = ["Todos os Locais"] + sorted(list(locais_unicos))
+        opcoes_locais_dropdown = [ft.dropdown.Option(l) for l in lista_opcoes_local]
+        dropdown_filtro_local = ft.Dropdown(
+            label="Alvo Específico (Opcional)", 
+            options=opcoes_locais_dropdown, 
+            value="Todos os Locais"
+        )
 
         def popup_nova_tarefa(e):
             def add_nova(e):
@@ -675,16 +688,19 @@ def main(page: ft.Page):
                 page.update()
                 return
             
+            local_alvo = dropdown_filtro_local.value
+            
             for andar_alvo in andares_selecionados:
                 for apto in banco_dados["obras"][obra][andar_alvo].keys():
-                    if tarefa not in banco_dados["obras"][obra][andar_alvo][apto]:
-                        banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
+                    if local_alvo == "Todos os Locais" or local_alvo == apto:
+                        if tarefa not in banco_dados["obras"][obra][andar_alvo][apto]:
+                            banco_dados["obras"][obra][andar_alvo][apto][tarefa] = {"status": "Não Iniciado", "obs": ""}
             
-            registrar_historico("Criou Tarefa Lote", f"[{obra}] - Injetou '{tarefa}' em {len(andares_selecionados)} andares.")
+            registrar_historico("Criou Tarefa Lote", f"[{obra}] - Injetou '{tarefa}' em {len(andares_selecionados)} andares (Alvo: {local_alvo}).")
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
-            snack = ft.SnackBar(ft.Text(f"✅ Tarefa '{tarefa}' adicionada em {len(andares_selecionados)} andares!"), bgcolor=ft.Colors.PURPLE_700)
+            snack = ft.SnackBar(ft.Text(f"✅ Tarefa adicionada com sucesso!"), bgcolor=ft.Colors.PURPLE_700)
             page.overlay.append(snack)
             snack.open = True
             
@@ -699,6 +715,7 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             linha_tarefa,
+            dropdown_filtro_local,
             ft.Text("A nova tarefa será criada como 'Não Iniciado'.", size=11, color=ft.Colors.GREY_600),
             ft.Divider(),
             ft.Row([ft.Text("ONDE ELA DEVE APARECER?", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
@@ -708,6 +725,9 @@ def main(page: ft.Page):
         page.add(cabecalho, layout, botao_aplicar)
 
 
+    # ==========================================
+    # FERRAMENTA C: REMOVER TAREFA SIMULTANEAMENTE (LOTE)
+    # ==========================================
     def abrir_tela_remover_tarefas(obra):
         page.floating_action_button = None 
         page.controls.clear()
@@ -719,13 +739,25 @@ def main(page: ft.Page):
         ])
 
         servicos_disponiveis = set(lista_servicos_base)
+        locais_unicos = set()
+        
         for and_dados in banco_dados["obras"][obra].values():
-            for ap_dados in and_dados.values():
+            for ap_nome, ap_dados in and_dados.items():
+                locais_unicos.add(ap_nome)
                 for s in ap_dados.keys():
                     servicos_disponiveis.add(s)
         
         opcoes_tarefas = [ft.dropdown.Option(s) for s in sorted(servicos_disponiveis)]
         dropdown_tarefa = ft.Dropdown(label="Escolha a Atividade a Excluir", options=opcoes_tarefas, expand=True)
+
+        # NOVO FILTRO DE CÔMODO
+        lista_opcoes_local = ["Todos os Locais"] + sorted(list(locais_unicos))
+        opcoes_locais_dropdown = [ft.dropdown.Option(l) for l in lista_opcoes_local]
+        dropdown_filtro_local = ft.Dropdown(
+            label="De qual Cômodo/Local?", 
+            options=opcoes_locais_dropdown, 
+            value="Todos os Locais"
+        )
 
         andares_ordenados = sorted(banco_dados["obras"][obra].keys(), key=lambda x: int(x) if str(x).isdigit() else 9999)
 
@@ -761,16 +793,19 @@ def main(page: ft.Page):
                 page.update()
                 return
             
+            local_alvo = dropdown_filtro_local.value
+            
             for andar_alvo in andares_selecionados:
                 for apto in list(banco_dados["obras"][obra][andar_alvo].keys()):
-                    if tarefa in banco_dados["obras"][obra][andar_alvo][apto]:
-                        del banco_dados["obras"][obra][andar_alvo][apto][tarefa]
+                    if local_alvo == "Todos os Locais" or local_alvo == apto:
+                        if tarefa in banco_dados["obras"][obra][andar_alvo][apto]:
+                            del banco_dados["obras"][obra][andar_alvo][apto][tarefa]
             
-            registrar_historico("Removeu Tarefa Lote", f"[{obra}] - Apagou '{tarefa}' de {len(andares_selecionados)} andares.")
+            registrar_historico("Removeu Tarefa Lote", f"[{obra}] - Apagou '{tarefa}' de {len(andares_selecionados)} andares (Alvo: {local_alvo}).")
             
             salvar_no_firebase(banco_dados, mostrar_snack=False)
             
-            snack = ft.SnackBar(ft.Text(f"❌ Tarefa '{tarefa}' apagada de {len(andares_selecionados)} andares!"), bgcolor=ft.Colors.RED_700)
+            snack = ft.SnackBar(ft.Text(f"❌ Tarefa removida com sucesso!"), bgcolor=ft.Colors.RED_700)
             page.overlay.append(snack)
             snack.open = True
             
@@ -785,7 +820,8 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             dropdown_tarefa,
-            ft.Text("Atenção: Esta ação excluirá permanentemente a tarefa e o seu histórico nos andares marcados.", size=11, color=ft.Colors.RED_500),
+            dropdown_filtro_local,
+            ft.Text("Atenção: Esta ação excluirá permanentemente a tarefa do local selecionado.", size=11, color=ft.Colors.RED_500),
             ft.Divider(),
             ft.Row([ft.Text("REMOVER DE QUAIS PAVIMENTOS?", size=12, weight=ft.FontWeight.BOLD, color=ft.Colors.GREY_600), btn_selecionar_todos], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
             ft.Container(content=grid_andares, expand=True)
@@ -930,11 +966,15 @@ def main(page: ft.Page):
                 cor_quadrado = get_cor_status(status_atual)
                 largura_celula = 45 if local_str == "Corredor" else 35
                 
+                # Flet 100% blindado com Rows e Columns
                 quadrado = ft.Container(
                     width=largura_celula, height=35, 
                     bgcolor=cor_quadrado, border_radius=4, 
                     tooltip=f"{local_str}: {status_atual}",
-                    content=ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, vertical_alignment=ft.CrossAxisAlignment.CENTER) if texto_impresso else None,
+                    content=ft.Column(
+                        [ft.Row([ft.Text(texto_impresso, size=8, color=ft.Colors.BLACK, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER)],
+                        alignment=ft.MainAxisAlignment.CENTER
+                    ) if texto_impresso else None,
                     padding=1
                 )
                 linha_andar.controls.append(quadrado)
@@ -1229,7 +1269,6 @@ def main(page: ft.Page):
                 )
             )
             
-            # BOTÃO DA GALERIA DE OBSERVAÇÕES
             botoes_menu.append(
                 ft.Container(
                     content=ft.Column([ft.Icon(ft.Icons.NOTES, size=35, color=ft.Colors.WHITE), ft.Text("Galeria\nObs.", color=ft.Colors.WHITE, size=11, weight=ft.FontWeight.BOLD, text_align=ft.TextAlign.CENTER)], alignment=ft.MainAxisAlignment.CENTER, horizontal_alignment=ft.CrossAxisAlignment.CENTER, spacing=2),
