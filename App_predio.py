@@ -280,8 +280,7 @@ def main(page: ft.Page):
         page.update()
 
     # ==========================================
-    # NOVO PAINEL DE MÉTRICAS (SISTEMA DE ABAS BLINDADO)
-    # Totalmente reconstruído sem usar a ferramenta instável "ft.Tabs"
+    # PAINEL DE MÉTRICAS (SISTEMA DE ABAS BLINDADO)
     # ==========================================
     def abrir_tela_dashboard(obra):
         page.floating_action_button = None 
@@ -493,7 +492,7 @@ def main(page: ft.Page):
                 visible=False
             )
 
-            # --- SISTEMA DE NAVEGAÇÃO CUSTOMIZADO (SUBSTITUI O TABS) ---
+            # --- SISTEMA DE NAVEGAÇÃO CUSTOMIZADO ---
             btn_geral = ft.ElevatedButton("Geral", on_click=lambda e: mudar_aba("geral"), style=ft.ButtonStyle(bgcolor=ft.Colors.BLUE_700, color=ft.Colors.WHITE), expand=True)
             btn_andar = ft.ElevatedButton("Andar", on_click=lambda e: mudar_aba("andar"), style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=ft.Colors.BLACK87), expand=True)
             btn_apto = ft.ElevatedButton("Cômodo", on_click=lambda e: mudar_aba("apto"), style=ft.ButtonStyle(bgcolor=ft.Colors.GREY_200, color=ft.Colors.BLACK87), expand=True)
@@ -532,6 +531,7 @@ def main(page: ft.Page):
 
     # ==========================================
     # TELA 6: LANÇAMENTO DE STATUS RÁPIDO LOTE
+    # AQUI ESTÁ A CORREÇÃO DE VISIBILIDADE EM BLOCO DA OBSERVAÇÃO
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.floating_action_button = None 
@@ -567,15 +567,17 @@ def main(page: ft.Page):
 
         campo_obs_lote = ft.TextField(
             label="Observação (aplica a todos os selecionados)",
-            multiline=True,
-            visible=False
+            multiline=True
         )
+        
+        # Envolvemos o campo num Bloco (Column) idêntico ao do popup individual, para o Flet não falhar a exibição.
+        bloco_obs_lote = ft.Column([campo_obs_lote], visible=False)
 
         def ao_mudar_status_lote(e):
             if dropdown_status.value in ["Não Conforme", "Em Andamento"]:
-                campo_obs_lote.visible = True
+                bloco_obs_lote.visible = True
             else:
-                campo_obs_lote.visible = False
+                bloco_obs_lote.visible = False
             page.update()
 
         dropdown_status.on_change = ao_mudar_status_lote
@@ -680,9 +682,13 @@ def main(page: ft.Page):
             page.overlay.append(snack)
             snack.open = True
             
+            # Limpeza completa após submeter para preparar para o próximo lançamento
             aptos_selecionados.clear()
             campo_obs_lote.value = "" 
+            dropdown_status.value = "Finalizado"
+            bloco_obs_lote.visible = False
             desenhar_grid()
+            page.update()
 
         botao_aplicar = ft.Container(
             content=ft.Row([ft.Icon(ft.Icons.DONE_ALL, color=ft.Colors.WHITE), ft.Text("ATUALIZAR APARTAMENTOS", color=ft.Colors.WHITE, weight="bold", size=15)], alignment="center"),
@@ -691,7 +697,7 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             ft.Row([dropdown_tarefa, dropdown_status]),
-            campo_obs_lote, 
+            bloco_obs_lote, # O bloco invisível blindado
             dropdown_andar,
             ft.Divider(),
             ft.Text("Toque nos apartamentos para atualizar:", size=12, weight="bold", color=ft.Colors.GREY_600),
