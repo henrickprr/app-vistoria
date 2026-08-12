@@ -253,7 +253,7 @@ def main(page: ft.Page):
                             ft.Row([
                                 ft.Text(f"{andar}º Andar - Apto {apto}", weight="bold", size=16),
                                 ft.Text(status, color=cor_borda, weight="bold", size=12)
-                            ], alignment="spaceBetween"),
+                            ], alignment=ft.MainAxisAlignment.SPACE_BETWEEN),
                             ft.Text(f"Atividade: {nome_servico}", color=ft.Colors.GREY_700, size=13, weight="bold"),
                             ft.Divider(),
                             ft.Text(f"📝 Obs:\n{obs}", size=14)
@@ -531,7 +531,6 @@ def main(page: ft.Page):
 
     # ==========================================
     # TELA 6: LANÇAMENTO DE STATUS RÁPIDO LOTE
-    # AQUI ESTÁ A CORREÇÃO DE VISIBILIDADE EM BLOCO DA OBSERVAÇÃO
     # ==========================================
     def abrir_tela_lancamento_status(obra):
         page.floating_action_button = None 
@@ -565,19 +564,19 @@ def main(page: ft.Page):
             expand=True
         )
 
+        # CORREÇÃO: O Campo de texto agora é gerido diretamente pela tela, sem "blocos invisíveis"
         campo_obs_lote = ft.TextField(
             label="Observação (aplica a todos os selecionados)",
-            multiline=True
+            multiline=True,
+            visible=False
         )
-        
-        # Envolvemos o campo num Bloco (Column) idêntico ao do popup individual, para o Flet não falhar a exibição.
-        bloco_obs_lote = ft.Column([campo_obs_lote], visible=False)
 
         def ao_mudar_status_lote(e):
+            # A magia acontece aqui: o campo aparece e desaparece consoante a escolha!
             if dropdown_status.value in ["Não Conforme", "Em Andamento"]:
-                bloco_obs_lote.visible = True
+                campo_obs_lote.visible = True
             else:
-                bloco_obs_lote.visible = False
+                campo_obs_lote.visible = False
             page.update()
 
         dropdown_status.on_change = ao_mudar_status_lote
@@ -682,11 +681,11 @@ def main(page: ft.Page):
             page.overlay.append(snack)
             snack.open = True
             
-            # Limpeza completa após submeter para preparar para o próximo lançamento
+            # Automação pedida: limpa o texto, reseta para Finalizado e esconde a caixa!
             aptos_selecionados.clear()
             campo_obs_lote.value = "" 
+            campo_obs_lote.visible = False
             dropdown_status.value = "Finalizado"
-            bloco_obs_lote.visible = False
             desenhar_grid()
             page.update()
 
@@ -697,7 +696,7 @@ def main(page: ft.Page):
 
         layout = ft.Column([
             ft.Row([dropdown_tarefa, dropdown_status]),
-            bloco_obs_lote, # O bloco invisível blindado
+            campo_obs_lote, # Caixa de texto solta no layout para não falhar
             dropdown_andar,
             ft.Divider(),
             ft.Text("Toque nos apartamentos para atualizar:", size=12, weight="bold", color=ft.Colors.GREY_600),
