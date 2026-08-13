@@ -586,6 +586,65 @@ def _local_da_coluna(andar: str, numero: int, locais: dict[str, Any]) -> str | N
     return min(candidatos, key=chave_ordenacao_natural) if candidatos else None
 
 
+def _dados_servico_pdf(
+    locais: dict[str, Any],
+    local: str | None,
+    servico: str,
+) -> dict[str, str]:
+    """Retorna dados normalizados de uma celula real da matriz."""
+
+    if local is None:
+        return nova_atividade()
+    atividades = locais.get(local, {})
+    if not isinstance(atividades, dict):
+        return nova_atividade()
+    return _dados_atividade_seguros(atividades.get(servico, nova_atividade()))
+
+
+def contar_status_matriz_pdf(
+    banco_dados: dict[str, Any],
+    obra: str,
+    servico: str,
+    andares: Sequence[str] | None = None,
+) -> Counter[str]:
+    """Conta os status apenas dos locais existentes e exibidos na matriz.
+
+    Uma posicao vazia entre as 14 colunas nao representa um apartamento real e
+    por isso nao entra no quantitativo. Se o local existe, mas ainda nao possui
+    a atividade escolhida, ele e contabilizado como ``Não Iniciado``.
+    """
+
+    contador: Counter[str] = Counter({status: 0 for status in STATUS})
+    obras = banco_dados.get("obras", {})
+    andares_obra = obras.get(obra, {}) if isinstance(obras, dict) else {}
+    if not isinstance(andares_obra, dict):
+        return contador
+
+    lista_andares = list(
+        andares or sorted(andares_obra, key=chave_ordenacao_natural)
+    )
+    for andar in lista_andares:
+        locais = andares_obra.get(str(andar), {})
+        if not isinstance(locais, dict):
+            continue
+
+        locais_contados: set[str] = set()
+        for numero in range(1, 15):
+            local = _local_da_coluna(str(andar), numero, locais)
+            if local is None or local in locais_contados:
+                continue
+            dados = _dados_servico_pdf(locais, local, servico)
+            contador[dados["status"]] += 1
+            locais_contados.add(local)
+
+        corredor = next((nome for nome in locais if eh_corredor(nome)), None)
+        if corredor is not None and corredor not in locais_contados:
+            dados = _dados_servico_pdf(locais, corredor, servico)
+            contador[dados["status"]] += 1
+
+    return contador
+
+
 def gerar_pdf(
     banco_dados: dict[str, Any],
     obra: str,
@@ -616,6 +675,43 @@ def gerar_pdf(
     altura_celula = 8.2
     largura_tabela = largura_andar + (14 * largura_apto) + largura_corredor
     margem_esquerda = (297.0 - largura_tabela) / 2
+    contagem_status = contar_status_matriz_pdf(
+        banco_dados,
+        obra,
+        servico_escolhido,
+        andares,
+    )
+    limite_inferior_tabela = pdf.h - 13.0
+
+    def desenhar_quantitativo() -> None:
+        """Desenha no rodape os totais correspondentes a cada cor da legenda."""
+
+        itens = (
+            ("Finalizado", "OK"),
+            ("Não Conforme", "Pendência"),
+            ("Em Andamento", "Andamento"),
+            ("Existente", "Existente"),
+            ("Não Iniciado", "Não iniciado"),
+        )
+        x = 10.0
+        y = pdf.h - 7.5
+        pdf.set_font("helvetica", "B", 6.8)
+        pdf.set_text_color(0, 0, 0)
+        total = sum(contagem_status.values())
+        titulo = _texto_pdf(f"QUANTITATIVO (total: {total})")
+        pdf.text(x, y + 2.8, titulo)
+        x += pdf.get_string_width(titulo) + 5.0
+
+        pdf.set_font("helvetica", "", 6.8)
+        for status, rotulo in itens:
+            rgb = STATUS_PDF_RGB[status]
+            pdf.set_fill_color(*rgb)
+            pdf.set_draw_color(70, 70, 70)
+            pdf.rect(x, y, 3.2, 3.2, style="DF")
+            texto = _texto_pdf(f"{rotulo}: {contagem_status[status]}")
+            pdf.set_text_color(0, 0, 0)
+            pdf.text(x + 4.2, y + 2.7, texto)
+            x += 4.2 + pdf.get_string_width(texto) + 6.0
 
     def desenhar_titulo_e_legenda() -> float:
         pdf.set_font("helvetica", "B", 14)
@@ -658,6 +754,7 @@ def gerar_pdf(
             pdf.set_text_color(0, 0, 0)
             pdf.text(x_legenda + 7.5, y_legenda + 3.1, _texto_pdf(rotulo))
             x_legenda += largura_item
+        desenhar_quantitativo()
         return 31.0
 
     def desenhar_cabecalho_tabela(y: float) -> float:
@@ -684,7 +781,7 @@ def gerar_pdf(
     y_atual = desenhar_cabecalho_tabela(desenhar_titulo_e_legenda())
 
     for andar in andares:
-        if y_atual + altura_celula > 199:
+        if y_atual + altura_celula > limite_inferior_tabela:
             pdf.add_page()
             y_atual = desenhar_cabecalho_tabela(desenhar_titulo_e_legenda())
 
@@ -709,13 +806,11 @@ def gerar_pdf(
         x_atual = margem_esquerda + largura_andar
         for numero in range(1, 15):
             local = _local_da_coluna(str(andar), numero, locais)
-            dados_servico: dict[str, Any] = {}
-            if local is not None:
-                atividades = locais.get(local, {})
-                if isinstance(atividades, dict):
-                    candidato = atividades.get(servico_escolhido, {})
-                    if isinstance(candidato, dict):
-                        dados_servico = candidato
+            dados_servico = _dados_servico_pdf(
+                locais,
+                local,
+                servico_escolhido,
+            )
             desenhar_celula_status(
                 pdf,
                 x=x_atual,
@@ -728,13 +823,11 @@ def gerar_pdf(
             x_atual += largura_apto
 
         corredor = next((nome for nome in locais if eh_corredor(nome)), None)
-        dados_corredor: dict[str, Any] = {}
-        if corredor is not None:
-            atividades = locais.get(corredor, {})
-            if isinstance(atividades, dict):
-                candidato = atividades.get(servico_escolhido, {})
-                if isinstance(candidato, dict):
-                    dados_corredor = candidato
+        dados_corredor = _dados_servico_pdf(
+            locais,
+            corredor,
+            servico_escolhido,
+        )
         desenhar_celula_status(
             pdf,
             x=x_atual,
@@ -1049,6 +1142,7 @@ class AppVistoria:
         confirmar_texto: str = "Salvar",
         confirmar_icone: ft.IconData = ft.Icons.SAVE,
         depois_de_salvar: Callable[[], None] | None = None,
+        fechar_apos_salvar: bool = True,
     ) -> None:
         botao_salvar: ft.FilledButton
 
@@ -1063,9 +1157,18 @@ class AppVistoria:
                     botao_salvar.disabled = False
                     self.page.update(botao_salvar)
                     return
-                self._fechar_dialogo()
-                if depois_de_salvar is not None:
-                    depois_de_salvar()
+                if fechar_apos_salvar:
+                    self._fechar_dialogo()
+                    if depois_de_salvar is not None:
+                        depois_de_salvar()
+                else:
+                    # Formularios de lancamento recorrente permanecem abertos.
+                    # Mantemos o escopo selecionado e apenas preparamos os
+                    # campos necessarios para a proxima alteracao.
+                    if depois_de_salvar is not None:
+                        depois_de_salvar()
+                    botao_salvar.disabled = False
+                    self.page.update()
             except Exception as erro:  # noqa: BLE001 - fronteira de eventos da UI
                 botao_salvar.disabled = False
                 self.page.update(botao_salvar)
@@ -2428,7 +2531,11 @@ class AppVistoria:
         obra: str,
         *,
         primeiro_andar_selecionado: bool = False,
-    ) -> tuple[ft.Control, Callable[[], tuple[list[str], str]]]:
+        selecao_multipla_locais: bool = False,
+    ) -> tuple[
+        ft.Control,
+        Callable[[], tuple[list[str], str | frozenset[str]]],
+    ]:
         andares = sorted(self.banco_dados["obras"][obra], key=chave_ordenacao_natural)
         checks: dict[str, ft.Checkbox] = {}
         grade_andares = ft.GridView(
@@ -2453,33 +2560,116 @@ class AppVistoria:
             self.page.update(grade_andares)
 
         nomes_locais: set[str] = set()
-        for locais in self.banco_dados["obras"][obra].values():
+        unidades_existentes: set[int] = set()
+        locais_customizados: set[str] = set()
+        tem_corredor = False
+        for andar, locais in self.banco_dados["obras"][obra].items():
             if isinstance(locais, dict):
                 nomes_locais.update(str(nome) for nome in locais)
 
-        opcoes_filtro = [
-            ft.DropdownOption(key="__todos__", text="Todos os locais"),
-            ft.DropdownOption(
-                key="__apartamentos__", text="Somente apartamentos/locais"
-            ),
-            ft.DropdownOption(key="__corredor__", text="Somente corredor"),
-        ]
-        opcoes_filtro.extend(
-            ft.DropdownOption(
-                key=f"__unidade_{numero:02d}__", text=f"Unidade {numero:02d}"
+                locais_mapeados: set[str] = set()
+                for numero in range(1, 15):
+                    local = _local_da_coluna(str(andar), numero, locais)
+                    if local is not None:
+                        unidades_existentes.add(numero)
+                        locais_mapeados.add(local)
+                for nome in locais:
+                    nome_texto = str(nome)
+                    if eh_corredor(nome_texto):
+                        tem_corredor = True
+                    elif nome_texto not in locais_mapeados:
+                        locais_customizados.add(nome_texto)
+
+        controles_locais: list[ft.Control]
+        checks_locais: dict[str, ft.Checkbox] = {}
+        filtro_local: ft.Dropdown | None = None
+
+        if selecao_multipla_locais:
+            opcoes_checkbox: list[tuple[str, str]] = [
+                (f"__unidade_{numero:02d}__", f"Unidade {numero:02d}")
+                for numero in sorted(unidades_existentes)
+            ]
+            if tem_corredor:
+                opcoes_checkbox.append(("__corredor__", "Corredor"))
+            opcoes_checkbox.extend(
+                (f"__local__{nome}", nome)
+                for nome in sorted(
+                    locais_customizados,
+                    key=chave_ordenacao_natural,
+                )
             )
-            for numero in range(1, 15)
-        )
-        opcoes_filtro.extend(
-            ft.DropdownOption(key=f"__local__{nome}", text=f"Nome exato: {nome}")
-            for nome in sorted(nomes_locais, key=chave_ordenacao_natural)
-        )
-        filtro_local = ft.Dropdown(
-            label="Filtro de apartamento/local",
-            value="__todos__",
-            options=opcoes_filtro,
-            enable_search=True,
-        )
+
+            grade_locais = ft.GridView(
+                max_extent=125,
+                child_aspect_ratio=3.2,
+                spacing=2,
+                run_spacing=2,
+                height=min(
+                    220,
+                    max(55, ((len(opcoes_checkbox) + 3) // 4) * 46),
+                ),
+            )
+            for chave, rotulo in opcoes_checkbox:
+                check = ft.Checkbox(label=rotulo, value=False)
+                checks_locais[chave] = check
+                grade_locais.controls.append(check)
+
+            def alternar_todos_locais(_: ft.Event[ft.OutlinedButton]) -> None:
+                novo_valor = not checks_locais or not all(
+                    check.value for check in checks_locais.values()
+                )
+                for check in checks_locais.values():
+                    check.value = novo_valor
+                self.page.update(grade_locais)
+
+            controles_locais = [
+                ft.Row(
+                    controls=[
+                        ft.Text(
+                            "Apartamentos/locais",
+                            weight=ft.FontWeight.BOLD,
+                            expand=True,
+                        ),
+                        ft.OutlinedButton(
+                            content="Marcar/desmarcar todos",
+                            icon=ft.Icons.SELECT_ALL,
+                            on_click=alternar_todos_locais,
+                        ),
+                    ],
+                    alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
+                ),
+                grade_locais,
+                ft.Text(
+                    "As unidades marcadas serão aplicadas em todos os pavimentos selecionados.",
+                    size=11,
+                    color=ft.Colors.GREY_600,
+                ),
+            ]
+        else:
+            opcoes_filtro = [
+                ft.DropdownOption(key="__todos__", text="Todos os locais"),
+                ft.DropdownOption(
+                    key="__apartamentos__", text="Somente apartamentos/locais"
+                ),
+                ft.DropdownOption(key="__corredor__", text="Somente corredor"),
+            ]
+            opcoes_filtro.extend(
+                ft.DropdownOption(
+                    key=f"__unidade_{numero:02d}__", text=f"Unidade {numero:02d}"
+                )
+                for numero in range(1, 15)
+            )
+            opcoes_filtro.extend(
+                ft.DropdownOption(key=f"__local__{nome}", text=f"Nome exato: {nome}")
+                for nome in sorted(nomes_locais, key=chave_ordenacao_natural)
+            )
+            filtro_local = ft.Dropdown(
+                label="Filtro de apartamento/local",
+                value="__todos__",
+                options=opcoes_filtro,
+                enable_search=True,
+            )
+            controles_locais = [filtro_local]
 
         conteudo = ft.Column(
             controls=[
@@ -2495,14 +2685,21 @@ class AppVistoria:
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 grade_andares,
-                filtro_local,
+                *controles_locais,
             ],
             tight=True,
         )
 
-        def obter() -> tuple[list[str], str]:
+        def obter() -> tuple[list[str], str | frozenset[str]]:
             selecionados = [andar for andar, check in checks.items() if check.value]
-            return selecionados, filtro_local.value or "__todos__"
+            if selecao_multipla_locais:
+                filtros = frozenset(
+                    chave for chave, check in checks_locais.items() if check.value
+                )
+                return selecionados, filtros
+            return selecionados, (
+                filtro_local.value if filtro_local is not None else "__todos__"
+            ) or "__todos__"
 
         return conteudo, obter
 
@@ -2510,8 +2707,16 @@ class AppVistoria:
         self,
         obra: str,
         andares: Iterable[str],
-        filtro_local: str,
+        filtro_local: str | Iterable[str],
     ) -> Iterable[tuple[str, str, dict[str, Any]]]:
+        filtros = (
+            {filtro_local}
+            if isinstance(filtro_local, str)
+            else {str(filtro) for filtro in filtro_local}
+        )
+        if not filtros:
+            return
+
         for andar in andares:
             locais = self.banco_dados["obras"][obra].get(andar, {})
             if not isinstance(locais, dict):
@@ -2519,18 +2724,19 @@ class AppVistoria:
             for local, atividades in locais.items():
                 if not isinstance(atividades, dict):
                     continue
-                incluir = False
-                if filtro_local == "__todos__":
-                    incluir = True
-                elif filtro_local == "__apartamentos__":
-                    incluir = not eh_corredor(local)
-                elif filtro_local == "__corredor__":
-                    incluir = eh_corredor(local)
-                elif filtro_local.startswith("__unidade_"):
-                    sufixo = filtro_local.removeprefix("__unidade_").removesuffix("__")
-                    incluir = not eh_corredor(local) and str(local).endswith(sufixo)
-                elif filtro_local.startswith("__local__"):
-                    incluir = str(local) == filtro_local.removeprefix("__local__")
+                incluir = "__todos__" in filtros
+                for filtro in filtros:
+                    if incluir:
+                        break
+                    if filtro == "__apartamentos__":
+                        incluir = not eh_corredor(local)
+                    elif filtro == "__corredor__":
+                        incluir = eh_corredor(local)
+                    elif filtro.startswith("__unidade_"):
+                        sufixo = filtro.removeprefix("__unidade_").removesuffix("__")
+                        incluir = not eh_corredor(local) and str(local).endswith(sufixo)
+                    elif filtro.startswith("__local__"):
+                        incluir = str(local) == filtro.removeprefix("__local__")
                 if incluir:
                     yield andar, str(local), atividades
 
@@ -2563,20 +2769,29 @@ class AppVistoria:
             value=True,
         )
         escopo, obter_escopo = self._controles_escopo_lote(
-            obra, primeiro_andar_selecionado=True
+            obra,
+            primeiro_andar_selecionado=True,
+            selecao_multipla_locais=True,
         )
         quantidade = 0
 
         async def aplicar() -> bool:
             nonlocal quantidade
             tarefa = campo_tarefa.value
-            andares, filtro = obter_escopo()
+            andares, filtros = obter_escopo()
             if not tarefa:
                 campo_tarefa.error_text = "Escolha uma atividade."
                 self.page.update(campo_tarefa)
                 return False
+            campo_tarefa.error_text = None
             if not andares:
                 self._snack("Selecione pelo menos um pavimento.", erro=True)
+                return False
+            if not filtros:
+                self._snack(
+                    "Selecione pelo menos um apartamento/local.",
+                    erro=True,
+                )
                 return False
             status = campo_status.value or "Não Iniciado"
             observacao_digitada = campo_obs.value.strip()
@@ -2586,7 +2801,7 @@ class AppVistoria:
                 quantidade = 0
                 alteracoes: dict[str, Any] = {}
                 for andar, local, atividades in self._iterar_alvos_lote(
-                    obra, andares, filtro
+                    obra, andares, filtros
                 ):
                     existe = tarefa in atividades
                     if not existe and not criar_ausente.value:
@@ -2614,6 +2829,12 @@ class AppVistoria:
                 mensagem_sucesso="Status em lote aplicado.",
             )
 
+        def preparar_proximo_lancamento() -> None:
+            # Preserva atividade, status, pavimentos e apartamentos marcados.
+            # A observacao e limpa para evitar sua repeticao acidental.
+            campo_obs.value = ""
+            campo_tarefa.error_text = None
+
         self._mostrar_formulario(
             titulo="Status rápido",
             conteudo=ft.Column(
@@ -2623,6 +2844,12 @@ class AppVistoria:
                     campo_obs,
                     criar_ausente,
                     limpar_finalizado,
+                    ft.Text(
+                        "Após aplicar, esta janela continuará aberta para o "
+                        "próximo lançamento.",
+                        size=11,
+                        color=ft.Colors.BLUE_700,
+                    ),
                     ft.Divider(),
                     escopo,
                 ],
@@ -2632,7 +2859,8 @@ class AppVistoria:
             ao_confirmar=aplicar,
             confirmar_texto="Aplicar",
             confirmar_icone=ft.Icons.DONE_ALL,
-            depois_de_salvar=lambda: self.abrir_tela_andares(obra),
+            depois_de_salvar=preparar_proximo_lancamento,
+            fechar_apos_salvar=False,
         )
 
     def _formulario_distribuir_tarefa(self, obra: str) -> None:
@@ -2811,7 +3039,9 @@ class AppVistoria:
             ],
         )
         escopo, obter_escopo = self._controles_escopo_lote(
-            obra, primeiro_andar_selecionado=True
+            obra,
+            primeiro_andar_selecionado=True,
+            selecao_multipla_locais=True,
         )
         quantidade = 0
 
@@ -2822,9 +3052,15 @@ class AppVistoria:
             if not tarefa or not observacao:
                 self._snack("Escolha a atividade e informe a observação.", erro=True)
                 return False
-            andares, filtro = obter_escopo()
+            andares, filtros = obter_escopo()
             if not andares:
                 self._snack("Selecione pelo menos um pavimento.", erro=True)
+                return False
+            if not filtros:
+                self._snack(
+                    "Selecione pelo menos um apartamento/local.",
+                    erro=True,
+                )
                 return False
 
             def mutacao() -> dict[str, Any]:
@@ -2832,7 +3068,7 @@ class AppVistoria:
                 quantidade = 0
                 alteracoes: dict[str, Any] = {}
                 for andar, local, atividades in self._iterar_alvos_lote(
-                    obra, andares, filtro
+                    obra, andares, filtros
                 ):
                     if tarefa not in atividades:
                         continue
@@ -2856,6 +3092,11 @@ class AppVistoria:
                 mensagem_sucesso="Observações gravadas.",
             )
 
+        def preparar_proximo_lancamento() -> None:
+            # A selecao permanece ativa para permitir varias anotacoes em
+            # sequencia; apenas o texto digitado e limpo.
+            campo_obs.value = ""
+
         self._mostrar_formulario(
             titulo="Inserir observação em lote",
             conteudo=ft.Column(
@@ -2863,6 +3104,11 @@ class AppVistoria:
                     campo_tarefa,
                     campo_obs,
                     modo,
+                    ft.Text(
+                        "Após gravar, esta janela continuará aberta para uma nova observação.",
+                        size=11,
+                        color=ft.Colors.BLUE_700,
+                    ),
                     ft.Divider(),
                     escopo,
                 ],
@@ -2872,7 +3118,8 @@ class AppVistoria:
             ao_confirmar=aplicar,
             confirmar_texto="Gravar",
             confirmar_icone=ft.Icons.NOTE_ADD,
-            depois_de_salvar=lambda: self.abrir_tela_andares(obra),
+            depois_de_salvar=preparar_proximo_lancamento,
+            fechar_apos_salvar=False,
         )
 
     # ------------------------------- galeria de observacoes ----------------
