@@ -1146,6 +1146,16 @@ class AppVistoria:
     ) -> None:
         botao_salvar: ft.FilledButton
 
+        # Em telas estreitas o AlertDialog precisa descontar suas margens e
+        # paddings da largura do viewport. As colunas dos formularios nao
+        # devem impor uma largura fixa maior que esse espaco disponivel.
+        largura_pagina = self.page.width
+        if not isinstance(largura_pagina, (int, float)) or largura_pagina <= 0:
+            # Fallback conservador: evita estouro mesmo antes de o navegador
+            # informar sua largura real ao servidor Flet.
+            largura_pagina = 360
+        largura_conteudo = max(220, min(410, float(largura_pagina) - 64))
+
         async def confirmar(_: ft.Event[ft.FilledButton]) -> None:
             botao_salvar.disabled = True
             self.page.update(botao_salvar)
@@ -1182,7 +1192,7 @@ class AppVistoria:
         dialogo = ft.AlertDialog(
             modal=True,
             title=ft.Text(titulo, weight=ft.FontWeight.BOLD),
-            content=conteudo,
+            content=ft.Container(content=conteudo, width=largura_conteudo),
             actions=[
                 ft.OutlinedButton(
                     content="Cancelar", on_click=lambda _: self._fechar_dialogo()
@@ -1190,6 +1200,21 @@ class AppVistoria:
                 botao_salvar,
             ],
             actions_alignment=ft.MainAxisAlignment.END,
+            actions_overflow_button_spacing=8,
+            inset_padding=ft.Padding.symmetric(horizontal=12, vertical=16),
+            title_padding=ft.Padding.only(left=16, top=16, right=16, bottom=0),
+            content_padding=ft.Padding.only(
+                left=16,
+                top=12,
+                right=16,
+                bottom=8,
+            ),
+            actions_padding=ft.Padding.only(
+                left=12,
+                top=4,
+                right=12,
+                bottom=12,
+            ),
             scrollable=True,
         )
         self.page.show_dialog(dialogo)
@@ -1587,7 +1612,9 @@ class AppVistoria:
             keyboard_type=ft.KeyboardType.NUMBER,
         )
         criar_unidades = ft.Checkbox(
-            label="Criar 14 apartamentos/locais e corredor em cada pavimento",
+            label=ft.Text(
+                "Criar 14 apartamentos/locais e corredor em cada pavimento"
+            ),
             value=True,
         )
 
@@ -1625,7 +1652,6 @@ class AppVistoria:
             conteudo=ft.Column(
                 controls=[campo_nome, campo_andares, criar_unidades],
                 tight=True,
-                width=360,
             ),
             ao_confirmar=salvar,
             depois_de_salvar=self.abrir_tela_obras,
@@ -1774,7 +1800,9 @@ class AppVistoria:
     def _formulario_novo_andar(self, obra: str) -> None:
         campo = ft.TextField(label="Nome/número do pavimento", autofocus=True)
         criar_unidades = ft.Checkbox(
-            label="Criar 14 apartamentos/locais e corredor com tarefas-base",
+            label=ft.Text(
+                "Criar 14 apartamentos/locais e corredor com tarefas-base"
+            ),
             value=True,
         )
 
@@ -1802,7 +1830,7 @@ class AppVistoria:
 
         self._mostrar_formulario(
             titulo="Novo pavimento",
-            conteudo=ft.Column(controls=[campo, criar_unidades], tight=True, width=360),
+            conteudo=ft.Column(controls=[campo, criar_unidades], tight=True),
             ao_confirmar=salvar,
             depois_de_salvar=lambda: self.abrir_tela_andares(obra),
         )
@@ -1955,7 +1983,7 @@ class AppVistoria:
 
         self._mostrar_formulario(
             titulo="Novo apartamento/local",
-            conteudo=ft.Column(controls=[campo, incluir_base], tight=True, width=360),
+            conteudo=ft.Column(controls=[campo, incluir_base], tight=True),
             ao_confirmar=salvar,
             depois_de_salvar=lambda: self.abrir_tela_apartamentos(obra, andar),
         )
@@ -2118,7 +2146,7 @@ class AppVistoria:
             max_length=800,
         )
         limpar_ao_finalizar = ft.Checkbox(
-            label="Limpar observação ao marcar como Finalizado",
+            label=ft.Text("Limpar observação ao marcar como Finalizado"),
             value=True,
         )
 
@@ -2147,7 +2175,6 @@ class AppVistoria:
             conteudo=ft.Column(
                 controls=[campo_status, campo_obs, limpar_ao_finalizar],
                 tight=True,
-                width=380,
             ),
             ao_confirmar=salvar,
             depois_de_salvar=lambda: self.abrir_tela_atividades(obra, andar, local),
@@ -2403,7 +2430,6 @@ class AppVistoria:
             conteudo=ft.Column(
                 controls=[campo_login, campo_nome, campo_senha, campo_perfil],
                 tight=True,
-                width=360,
             ),
             ao_confirmar=salvar,
             depois_de_salvar=self.abrir_tela_usuarios,
@@ -2539,7 +2565,7 @@ class AppVistoria:
         andares = sorted(self.banco_dados["obras"][obra], key=chave_ordenacao_natural)
         checks: dict[str, ft.Checkbox] = {}
         grade_andares = ft.GridView(
-            max_extent=145,
+            runs_count=2,
             child_aspect_ratio=3.6,
             spacing=2,
             run_spacing=2,
@@ -2585,13 +2611,16 @@ class AppVistoria:
         filtro_local: ft.Dropdown | None = None
 
         if selecao_multipla_locais:
-            opcoes_checkbox: list[tuple[str, str]] = [
-                (f"__unidade_{numero:02d}__", f"Unidade {numero:02d}")
+            # A chave interna continua identificando a coluna do apartamento,
+            # mas o rotulo visual fica compacto: 01, 02, ... 14.
+            opcoes_unidades: list[tuple[str, str]] = [
+                (f"__unidade_{numero:02d}__", f"{numero:02d}")
                 for numero in sorted(unidades_existentes)
             ]
+            opcoes_adicionais: list[tuple[str, str]] = []
             if tem_corredor:
-                opcoes_checkbox.append(("__corredor__", "Corredor"))
-            opcoes_checkbox.extend(
+                opcoes_adicionais.append(("__corredor__", "Corredor"))
+            opcoes_adicionais.extend(
                 (f"__local__{nome}", nome)
                 for nome in sorted(
                     locais_customizados,
@@ -2600,19 +2629,27 @@ class AppVistoria:
             )
 
             grade_locais = ft.GridView(
-                max_extent=125,
-                child_aspect_ratio=3.2,
+                runs_count=3,
+                child_aspect_ratio=2.7,
                 spacing=2,
                 run_spacing=2,
                 height=min(
-                    220,
-                    max(55, ((len(opcoes_checkbox) + 3) // 4) * 46),
+                    230,
+                    max(55, ((len(opcoes_unidades) + 2) // 3) * 44),
                 ),
             )
-            for chave, rotulo in opcoes_checkbox:
+            for chave, rotulo in opcoes_unidades:
                 check = ft.Checkbox(label=rotulo, value=False)
                 checks_locais[chave] = check
                 grade_locais.controls.append(check)
+
+            controles_adicionais: list[ft.Control] = []
+            for chave, rotulo in opcoes_adicionais:
+                # Corredor e nomes personalizados usam a largura completa;
+                # assim nunca disputam espaco com as colunas numericas.
+                check = ft.Checkbox(label=ft.Text(rotulo), value=False)
+                checks_locais[chave] = check
+                controles_adicionais.append(check)
 
             def alternar_todos_locais(_: ft.Event[ft.OutlinedButton]) -> None:
                 novo_valor = not checks_locais or not all(
@@ -2620,7 +2657,9 @@ class AppVistoria:
                 )
                 for check in checks_locais.values():
                     check.value = novo_valor
-                self.page.update(grade_locais)
+                # Inclui tambem Corredor e eventuais locais personalizados,
+                # que ficam fora da grade numerica para nao cortar seus nomes.
+                self.page.update()
 
             controles_locais = [
                 ft.Row(
@@ -2631,16 +2670,18 @@ class AppVistoria:
                             expand=True,
                         ),
                         ft.OutlinedButton(
-                            content="Marcar/desmarcar todos",
+                            content="Todos",
                             icon=ft.Icons.SELECT_ALL,
+                            tooltip="Marcar/desmarcar todos",
                             on_click=alternar_todos_locais,
                         ),
                     ],
                     alignment=ft.MainAxisAlignment.SPACE_BETWEEN,
                 ),
                 grade_locais,
+                *controles_adicionais,
                 ft.Text(
-                    "As unidades marcadas serão aplicadas em todos os pavimentos selecionados.",
+                    "Os locais marcados serão aplicados em todos os pavimentos selecionados.",
                     size=11,
                     color=ft.Colors.GREY_600,
                 ),
@@ -2655,7 +2696,7 @@ class AppVistoria:
             ]
             opcoes_filtro.extend(
                 ft.DropdownOption(
-                    key=f"__unidade_{numero:02d}__", text=f"Unidade {numero:02d}"
+                    key=f"__unidade_{numero:02d}__", text=f"{numero:02d}"
                 )
                 for numero in range(1, 15)
             )
@@ -2677,8 +2718,9 @@ class AppVistoria:
                     controls=[
                         ft.Text("Pavimentos", weight=ft.FontWeight.BOLD, expand=True),
                         ft.OutlinedButton(
-                            content="Marcar/desmarcar todos",
+                            content="Todos",
                             icon=ft.Icons.SELECT_ALL,
+                            tooltip="Marcar/desmarcar todos",
                             on_click=alternar_todos,
                         ),
                     ],
@@ -2761,11 +2803,11 @@ class AppVistoria:
             hint_text="Se vazia, a observação atual será preservada.",
         )
         criar_ausente = ft.Checkbox(
-            label="Criar a atividade nos locais onde ela não existe",
+            label=ft.Text("Criar a atividade nos locais onde ela não existe"),
             value=False,
         )
         limpar_finalizado = ft.Checkbox(
-            label="Limpar observação ao marcar como Finalizado",
+            label=ft.Text("Limpar observação ao marcar como Finalizado"),
             value=True,
         )
         escopo, obter_escopo = self._controles_escopo_lote(
@@ -2854,7 +2896,6 @@ class AppVistoria:
                     escopo,
                 ],
                 tight=True,
-                width=410,
             ),
             ao_confirmar=aplicar,
             confirmar_texto="Aplicar",
@@ -2878,7 +2919,7 @@ class AppVistoria:
             max_length=800,
         )
         sobrescrever = ft.Checkbox(
-            label="Sobrescrever a atividade se ela já existir",
+            label=ft.Text("Sobrescrever a atividade se ela já existir"),
             value=False,
         )
         escopo, obter_escopo = self._controles_escopo_lote(obra)
@@ -2937,7 +2978,6 @@ class AppVistoria:
                     escopo,
                 ],
                 tight=True,
-                width=410,
             ),
             ao_confirmar=aplicar,
             confirmar_texto="Distribuir",
@@ -3006,7 +3046,6 @@ class AppVistoria:
                     escopo,
                 ],
                 tight=True,
-                width=410,
             ),
             ao_confirmar=aplicar,
             confirmar_texto="Remover",
@@ -3113,7 +3152,6 @@ class AppVistoria:
                     escopo,
                 ],
                 tight=True,
-                width=410,
             ),
             ao_confirmar=aplicar,
             confirmar_texto="Gravar",
