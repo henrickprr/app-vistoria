@@ -26,6 +26,7 @@ import json
 import os
 import re
 import secrets
+import threading
 import time
 import unicodedata
 import urllib.error
@@ -118,6 +119,13 @@ VISOR_3D_TOKEN_SECRET = (
     else secrets.token_bytes(48)
 )
 VISOR_3D_TOKEN_TTL_SECONDS = 60 * 60
+
+# Downloads de PDF ficam somente na memoria do servidor, protegidos por um
+# token aleatorio e removidos automaticamente apos alguns minutos.
+PDF_DOWNLOAD_TTL_SECONDS = 5 * 60
+PDF_DOWNLOAD_MAX_ITEMS = 50
+_downloads_pdf: dict[str, tuple[float, str, bytes]] = {}
+_downloads_pdf_lock = threading.Lock()
 
 try:
     VISOR_3D_TOTAL_PAVIMENTOS = max(
@@ -975,8 +983,8 @@ def gerar_pdf(
 ) -> bytes:
     """Gera o PDF matricial e retorna seus bytes.
 
-    ``caminho_arquivo`` e opcional para manter compatibilidade com o fluxo
-    desktop antigo. No PWA os bytes sao entregues diretamente ao FilePicker.
+    O caminho_arquivo e opcional para manter compatibilidade com o fluxo
+    desktop antigo. No PWA os bytes sao servidos por uma rota temporaria.
     """
 
     obras = banco_dados.get("obras", {})
@@ -1212,6 +1220,48 @@ def progresso_contador(contador: Counter[str]) -> tuple[int, int, float]:
     return total, concluidas, percentual
 
 
+def registrar_download_pdf(nome: str, conteudo: bytes) -> str:
+    """Registra um PDF temporario e devolve um token dificil de adivinhar."""
+
+    agora = time.time()
+    expira_em = agora + PDF_DOWNLOAD_TTL_SECONDS
+    with _downloads_pdf_lock:
+        for token_expirado in [
+            token
+            for token, (expiracao, _, _) in _downloads_pdf.items()
+            if expiracao <= agora
+        ]:
+            _downloads_pdf.pop(token_expirado, None)
+
+        while len(_downloads_pdf) >= PDF_DOWNLOAD_MAX_ITEMS:
+            token_mais_antigo = min(
+                _downloads_pdf,
+                key=lambda token: _downloads_pdf[token][0],
+            )
+            _downloads_pdf.pop(token_mais_antigo, None)
+
+        token = secrets.token_urlsafe(32)
+        while token in _downloads_pdf:
+            token = secrets.token_urlsafe(32)
+        _downloads_pdf[token] = (expira_em, nome, conteudo)
+    return token
+
+
+def consultar_download_pdf(token: str) -> tuple[str, bytes] | None:
+    """Consulta um PDF temporario ainda valido."""
+
+    agora = time.time()
+    with _downloads_pdf_lock:
+        registro = _downloads_pdf.get(token)
+        if registro is None:
+            return None
+        expira_em, nome, conteudo = registro
+        if expira_em <= agora:
+            _downloads_pdf.pop(token, None)
+            return None
+        return nome, conteudo
+
+
 # ---------------------------------------------------------------------------
 # Aplicacao Flet
 # ---------------------------------------------------------------------------
@@ -1232,7 +1282,6 @@ class AppVistoria:
         # Flet >= 0.80 substituiu page.client_storage por SharedPreferences.
         # O comportamento de "Manter-me logado" continua sendo local ao cliente.
         self.preferencias = ft.SharedPreferences()
-        self.seletor_arquivo = ft.FilePicker()
 
         self.page.title = "App de Vistoria"
         self.page.theme_mode = ft.ThemeMode.LIGHT
@@ -3996,6 +4045,7 @@ class AppVistoria:
         atividade: str,
         botao: ft.FilledButton,
     ) -> None:
+        download_pronto = False
         botao.disabled = True
         botao.content = "Gerando PDF..."
         self.page.update(botao)
@@ -4016,29 +4066,32 @@ class AppVistoria:
                 f"Relatorio_{self._slug_arquivo(obra)}_"
                 f"{self._slug_arquivo(atividade)}.pdf"
             )
-            # Cria o servico na sessao ativa do navegador. Manter um FilePicker
-            # criado no __init__ pode deixa-lo sem listener apos reconexoes do PWA.
-            seletor_arquivo = ft.FilePicker()
-            self.page.overlay.append(seletor_arquivo)
-            self.page.update()
-            await seletor_arquivo.save_file(
-                dialog_title="Salvar relatório de vistoria",
-                file_name=nome,
-                file_type=ft.FilePickerFileType.CUSTOM,
-                allowed_extensions=["pdf"],
-                src_bytes=conteudo,
-            )
-            self._snack("PDF gerado com sucesso.")
+            token = registrar_download_pdf(nome, conteudo)
+            caminho = f"/downloads/pdf/{token}"
+            endereco = f"{PUBLIC_BASE_URL}{caminho}" if PUBLIC_BASE_URL else caminho
+
+            # O FilePicker e o UrlLauncher usam controles de servico que podem
+            # falhar no Flet Web. A propriedade url do botao e aberta diretamente
+            # pelo cliente e baixa o arquivo pela rota FastAPI abaixo.
+            botao.disabled = False
+            botao.content = "Baixar PDF"
+            botao.icon = ft.Icons.DOWNLOAD
+            botao.url = endereco
+            botao.on_click = None
+            self.page.update(botao)
+            download_pronto = True
+            self._snack("PDF pronto. Toque em ‘Baixar PDF’ para salvar.")
         except Exception as erro:  # noqa: BLE001 - fronteira de exportacao
             self._snack(f"Não foi possível gerar o PDF: {erro}", erro=True)
         finally:
-            botao.disabled = False
-            botao.content = "Gerar PDF (A4 paisagem)"
-            try:
-                self.page.update(botao)
-            except RuntimeError:
-                # O usuario pode sair da tela enquanto o arquivo e preparado.
-                pass
+            if not download_pronto:
+                botao.disabled = False
+                botao.content = "Gerar PDF (A4 paisagem)"
+                try:
+                    self.page.update(botao)
+                except RuntimeError:
+                    # O usuario pode sair da tela enquanto o arquivo e preparado.
+                    pass
 
     def abrir_tela_relatorio(self, obra: str, atividade: str) -> None:
         cabecalho = self._cabecalho(
@@ -4237,6 +4290,34 @@ _repo_api_visor = FirebaseRepository(FIREBASE_URL, FIREBASE_AUTH_TOKEN)
 @app.get("/healthz")
 async def verificar_saude() -> dict[str, str]:
     return {"status": "ok"}
+
+
+@app.get("/downloads/pdf/{token}")
+async def baixar_pdf_temporario(token: str) -> Response:
+    """Entrega um PDF temporario sem depender do FilePicker do Flet Web."""
+
+    registro = consultar_download_pdf(token)
+    if registro is None:
+        raise HTTPException(
+            status_code=404,
+            detail="O link do PDF expirou. Gere o relatório novamente.",
+        )
+
+    nome, conteudo = registro
+    nome_seguro = re.sub(r"[^A-Za-z0-9._-]+", "_", nome) or "relatorio.pdf"
+    nome_codificado = urllib.parse.quote(nome_seguro)
+    return Response(
+        content=conteudo,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": (
+                f'attachment; filename="{nome_seguro}"; '
+                f"filename*=UTF-8''{nome_codificado}"
+            ),
+            "Cache-Control": "no-store, max-age=0",
+            "X-Content-Type-Options": "nosniff",
+        },
+    )
 
 
 @app.get("/api/visor3d/obra")
