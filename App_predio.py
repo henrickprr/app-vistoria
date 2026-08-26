@@ -4,12 +4,12 @@ Compatibilidade validada:
     - Flet 0.86.5
     - fpdf2 2.8.8
 
-Execucao local:
-    python -m pip install "flet==0.86.5" "fpdf2==2.8.8"
-    flet run App_predio.py
+Execucao local/PWA com o visualizador 3D integrado:
+    python -m pip install -r requirements.txt
+    python App_predio.py
 
-Execucao web/PWA:
-    flet run --web App_predio.py
+Execucao ASGI alternativa:
+    uvicorn App_predio:app --host 0.0.0.0 --port 8000
 
 O arquivo concentra a aplicacao por solicitacao do projeto, mas separa as
 responsabilidades em funcoes puras, repositorio Firebase, gerador de PDF e UI.
@@ -18,6 +18,7 @@ responsabilidades em funcoes puras, repositorio Firebase, gerador de PDF e UI.
 from __future__ import annotations
 
 import asyncio
+import base64
 import copy
 import hashlib
 import hmac
@@ -36,8 +37,16 @@ from pathlib import Path
 from typing import Any
 
 import flet as ft
+import flet.fastapi as flet_fastapi
 from fpdf import FPDF
 from fpdf.enums import XPos, YPos
+from fastapi import Header, HTTPException, Response
+from pydantic import BaseModel, Field
+
+try:
+    import flet_webview as fwv
+except ImportError:  # O restante do aplicativo continua funcional sem o extra.
+    fwv = None
 
 FIREBASE_URL = os.getenv(
     "FIREBASE_URL",
@@ -91,6 +100,117 @@ SERVICOS_BASE = (
 )
 
 CHAVES_FIREBASE_PROIBIDAS = re.compile(r"[.#$\[\]/]")
+
+APP_DIR = Path(__file__).resolve().parent
+ASSETS_DIR = Path(os.getenv("FLET_ASSETS_DIR", APP_DIR / "assets")).resolve()
+PUBLIC_BASE_URL = os.getenv("PUBLIC_BASE_URL", "").strip().rstrip("/")
+
+# O token do visualizador nunca carrega a senha nem os dados completos do banco.
+# Em producao, configure VISOR_3D_SECRET no provedor de hospedagem. O fallback
+# aleatorio e seguro para um unico processo, mas e renovado a cada reinicio.
+_segredo_visor_ambiente = (
+    os.getenv("VISOR_3D_SECRET", "").strip()
+    or os.getenv("FLET_SECRET_KEY", "").strip()
+)
+VISOR_3D_TOKEN_SECRET = (
+    _segredo_visor_ambiente.encode("utf-8")
+    if _segredo_visor_ambiente
+    else secrets.token_bytes(48)
+)
+VISOR_3D_TOKEN_TTL_SECONDS = 60 * 60
+
+try:
+    VISOR_3D_TOTAL_PAVIMENTOS = max(
+        1, min(80, int(os.getenv("VISOR_3D_TOTAL_PAVIMENTOS", "17")))
+    )
+except ValueError:
+    VISOR_3D_TOTAL_PAVIMENTOS = 17
+
+
+class AtualizacaoAtividadeVisor(BaseModel):
+    """Payload minimo aceito pelo endpoint protegido do visualizador 3D."""
+
+    andar: str = Field(min_length=1, max_length=80)
+    apartamento: str = Field(min_length=1, max_length=80)
+    atividade: str = Field(min_length=1, max_length=180)
+    status: str = Field(min_length=1, max_length=40)
+    observacao: str = Field(default="", max_length=800)
+    limpar_observacao: bool = False
+
+
+def _base64_url_codificar(valor: bytes) -> str:
+    return base64.urlsafe_b64encode(valor).decode("ascii").rstrip("=")
+
+
+def _base64_url_decodificar(valor: str) -> bytes:
+    preenchimento = "=" * (-len(valor) % 4)
+    return base64.urlsafe_b64decode(valor + preenchimento)
+
+
+def criar_token_visor3d(usuario: str, perfil: str, obra: str) -> str:
+    """Cria uma autorizacao curta e assinada para uma unica obra."""
+
+    agora = int(time.time())
+    payload = {
+        "usuario": str(usuario),
+        "perfil": str(perfil),
+        "obra": str(obra),
+        "iat": agora,
+        "exp": agora + VISOR_3D_TOKEN_TTL_SECONDS,
+        "nonce": secrets.token_urlsafe(8),
+    }
+    corpo = _base64_url_codificar(
+        json.dumps(payload, ensure_ascii=False, separators=(",", ":")).encode(
+            "utf-8"
+        )
+    )
+    assinatura = _base64_url_codificar(
+        hmac.new(
+            VISOR_3D_TOKEN_SECRET,
+            corpo.encode("ascii"),
+            hashlib.sha256,
+        ).digest()
+    )
+    return f"{corpo}.{assinatura}"
+
+
+def validar_token_visor3d(token: str) -> dict[str, Any]:
+    """Valida assinatura, formato e prazo do token sem consultar o navegador."""
+
+    try:
+        corpo, assinatura_recebida = token.split(".", 1)
+        assinatura_esperada = _base64_url_codificar(
+            hmac.new(
+                VISOR_3D_TOKEN_SECRET,
+                corpo.encode("ascii"),
+                hashlib.sha256,
+            ).digest()
+        )
+        if not hmac.compare_digest(assinatura_recebida, assinatura_esperada):
+            raise ValueError("Assinatura inválida.")
+        payload = json.loads(_base64_url_decodificar(corpo).decode("utf-8"))
+    except (ValueError, UnicodeError, json.JSONDecodeError) as erro:
+        raise ValueError("Autorização do visualizador inválida.") from erro
+
+    agora = int(time.time())
+    if not isinstance(payload, dict) or int(payload.get("exp", 0)) < agora:
+        raise ValueError("A sessão do visualizador expirou. Abra o 3D novamente.")
+    if int(payload.get("iat", 0)) > agora + 60:
+        raise ValueError("Autorização com horário inválido.")
+    if payload.get("perfil") not in PERFIS:
+        raise ValueError("Perfil inválido.")
+    if not payload.get("usuario") or not payload.get("obra"):
+        raise ValueError("Autorização incompleta.")
+    return payload
+
+
+def _claims_do_cabecalho(authorization: str | None) -> dict[str, Any]:
+    if not authorization or not authorization.startswith("Bearer "):
+        raise HTTPException(status_code=401, detail="Autorização ausente.")
+    try:
+        return validar_token_visor3d(authorization.removeprefix("Bearer ").strip())
+    except ValueError as erro:
+        raise HTTPException(status_code=401, detail=str(erro)) from erro
 
 
 # ---------------------------------------------------------------------------
@@ -584,6 +704,207 @@ def _local_da_coluna(andar: str, numero: int, locais: dict[str, Any]) -> str | N
         nome for nome in locais if not eh_corredor(nome) and str(nome).endswith(sufixo)
     ]
     return min(candidatos, key=chave_ordenacao_natural) if candidatos else None
+
+
+def _status_resumido_local(atividades: dict[str, Any]) -> str:
+    """Resume o conjunto de atividades na mesma prioridade usada pela UI."""
+
+    if not atividades:
+        return "Não Iniciado"
+    estados = [
+        _dados_atividade_seguros(dados)["status"] for dados in atividades.values()
+    ]
+    if "Não Conforme" in estados:
+        return "Não Conforme"
+    if all(status in {"Finalizado", "Existente"} for status in estados):
+        return "Existente" if all(status == "Existente" for status in estados) else "Finalizado"
+    if any(status != "Não Iniciado" for status in estados):
+        return "Em Andamento"
+    return "Não Iniciado"
+
+
+def _autorizar_claims_no_banco(
+    banco: dict[str, Any],
+    claims: dict[str, Any],
+    *,
+    exigir_edicao: bool = False,
+) -> str:
+    """Confirma novamente usuario/perfil para revogar tokens de usuarios removidos."""
+
+    usuario = str(claims.get("usuario", ""))
+    registro = banco.get("usuarios", {}).get(usuario)
+    if not isinstance(registro, dict):
+        raise PermissionError("Usuário não está mais autorizado.")
+    perfil = str(registro.get("perfil", "visualizador"))
+    if perfil not in PERFIS:
+        raise PermissionError("Perfil de usuário inválido.")
+    if exigir_edicao and perfil not in {"admin", "editor"}:
+        raise PermissionError("Seu perfil permite somente visualização.")
+    return perfil
+
+
+def construir_snapshot_visor3d(
+    banco: dict[str, Any],
+    obra: str,
+    *,
+    perfil: str,
+) -> dict[str, Any]:
+    """Separa somente a obra necessária ao 3D; usuarios/historico nunca saem."""
+
+    andares_brutos = banco.get("obras", {}).get(obra)
+    if not isinstance(andares_brutos, dict):
+        raise KeyError("Obra não encontrada.")
+
+    andares_saida: dict[str, Any] = {}
+    for andar in sorted(andares_brutos, key=chave_ordenacao_natural):
+        locais = andares_brutos.get(andar, {})
+        if not isinstance(locais, dict):
+            continue
+
+        apartamentos: dict[str, Any] = {}
+        locais_mapeados: set[str] = set()
+        for numero in range(1, 15):
+            local = _local_da_coluna(str(andar), numero, locais)
+            atividades: dict[str, dict[str, str]] = {}
+            if local is not None:
+                locais_mapeados.add(local)
+                dados_local = locais.get(local, {})
+                if isinstance(dados_local, dict):
+                    atividades = {
+                        str(nome): _dados_atividade_seguros(dados)
+                        for nome, dados in dados_local.items()
+                    }
+            apartamentos[f"{numero:02d}"] = {
+                "chave": local,
+                "status": _status_resumido_local(atividades),
+                "atividades": atividades,
+            }
+
+        corredor = next((nome for nome in locais if eh_corredor(nome)), None)
+        atividades_corredor: dict[str, dict[str, str]] = {}
+        if corredor is not None:
+            locais_mapeados.add(corredor)
+            dados_corredor = locais.get(corredor, {})
+            if isinstance(dados_corredor, dict):
+                atividades_corredor = {
+                    str(nome): _dados_atividade_seguros(dados)
+                    for nome, dados in dados_corredor.items()
+                }
+
+        personalizados = [
+            str(nome) for nome in locais if str(nome) not in locais_mapeados
+        ]
+        andares_saida[str(andar)] = {
+            "apartamentos": apartamentos,
+            "corredor": {
+                "chave": corredor,
+                "status": _status_resumido_local(atividades_corredor),
+                "atividades": atividades_corredor,
+            },
+            "locais_nao_mapeados": sorted(
+                personalizados, key=chave_ordenacao_natural
+            ),
+        }
+
+    return {
+        "obra": obra,
+        "perfil": perfil,
+        "pode_editar": perfil in {"admin", "editor"},
+        "configuracao": {
+            "pavimentos": VISOR_3D_TOTAL_PAVIMENTOS,
+            "apartamentos_por_pavimento": 14,
+            "lado_esquerdo": [f"{numero:02d}" for numero in range(1, 8)],
+            "lado_direito": [f"{numero:02d}" for numero in range(8, 15)],
+        },
+        "andares": andares_saida,
+    }
+
+
+def atualizar_atividade_pelo_visor(
+    repo: FirebaseRepository,
+    claims: dict[str, Any],
+    atualizacao: dict[str, Any],
+) -> dict[str, Any]:
+    """Atualiza uma atividade pelo 3D com validacao e PATCH atomico."""
+
+    bruto = repo.carregar()
+    banco, _ = normalizar_banco(bruto)
+    perfil = _autorizar_claims_no_banco(banco, claims, exigir_edicao=True)
+    obra = str(claims["obra"])
+    andar = validar_chave_firebase(atualizacao.get("andar", ""), "Pavimento")
+    atividade = validar_chave_firebase(
+        atualizacao.get("atividade", ""), "Atividade"
+    )
+    apartamento = str(atualizacao.get("apartamento", "")).strip()
+    status = str(atualizacao.get("status", ""))
+    if status not in STATUS:
+        raise ValueError("Status inválido.")
+
+    andares = banco.get("obras", {}).get(obra)
+    if not isinstance(andares, dict) or andar not in andares:
+        raise KeyError("Pavimento não encontrado.")
+    locais = andares[andar]
+    if not isinstance(locais, dict):
+        raise KeyError("Pavimento sem locais válidos.")
+
+    if eh_corredor(apartamento):
+        local = next((nome for nome in locais if eh_corredor(nome)), None)
+    else:
+        try:
+            numero = int(apartamento)
+        except ValueError as erro:
+            raise ValueError("Número do apartamento inválido.") from erro
+        if numero not in range(1, 15):
+            raise ValueError("O apartamento deve estar entre 01 e 14.")
+        local = _local_da_coluna(andar, numero, locais)
+
+    if local is None:
+        raise KeyError("Apartamento/local não cadastrado neste pavimento.")
+    atividades = locais.get(local)
+    if not isinstance(atividades, dict) or atividade not in atividades:
+        raise KeyError("Atividade não encontrada neste apartamento/local.")
+
+    observacao = str(atualizacao.get("observacao", "")).strip()[:800]
+    if status == "Finalizado" and bool(atualizacao.get("limpar_observacao")):
+        observacao = ""
+    novos_dados = {"status": status, "obs": observacao}
+    atividades[atividade] = novos_dados
+
+    historico = banco.setdefault("historico", [])
+    if isinstance(historico, dict):
+        historico = [
+            historico[chave]
+            for chave in sorted(historico, key=chave_ordenacao_natural)
+        ]
+    if not isinstance(historico, list):
+        historico = []
+    historico.insert(
+        0,
+        {
+            "data": time.strftime("%d/%m/%Y %H:%M"),
+            "user": str(claims["usuario"]),
+            "acao": "Atualização pelo visualizador 3D",
+            "detalhes": (
+                f"[{obra}/{andar}/{local}] [{atividade}] alterada para [{status}]."
+            ),
+        },
+    )
+    del historico[300:]
+
+    repo.atualizar(
+        {
+            f"obras/{obra}/{andar}/{local}/{atividade}": novos_dados,
+            "historico": historico,
+        }
+    )
+    return {
+        "andar": andar,
+        "apartamento": apartamento,
+        "local": local,
+        "atividade": atividade,
+        "dados": novos_dados,
+        "perfil": perfil,
+    }
 
 
 def _dados_servico_pdf(
@@ -1785,7 +2106,17 @@ class AppVistoria:
                 on_click=lambda _: self._abrir_menu_ferramentas(obra),
             )
 
-        rodape: list[ft.Control] = [lista]
+        acesso_visor = self._cartao_navegacao(
+            titulo="Explorar edifício em 3D",
+            subtitulo=(
+                f"{VISOR_3D_TOTAL_PAVIMENTOS} pavimentos • "
+                "01–07 à esquerda • 08–14 à direita"
+            ),
+            icone=ft.Icons.VIEW_IN_AR,
+            cor=ft.Colors.BLUE_800,
+            ao_clicar=lambda: self.abrir_tela_visor3d(obra),
+        )
+        rodape: list[ft.Control] = [acesso_visor, lista]
         if self.pode_editar:
             rodape.append(
                 ft.OutlinedButton(
@@ -1796,6 +2127,83 @@ class AppVistoria:
             )
         corpo = ft.Column(controls=rodape, expand=True)
         self._definir_tela(cabecalho=cabecalho, corpo=corpo, fab=fab)
+
+    def abrir_tela_visor3d(self, obra: str) -> None:
+        """Abre o modulo Three.js com um token curto limitado a esta obra."""
+
+        if obra not in self.banco_dados.get("obras", {}):
+            self._snack("Obra não encontrada.", erro=True)
+            self.abrir_tela_obras()
+            return
+        usuario = str(self.estado_sessao.get("usuario") or "")
+        perfil = str(self.estado_sessao.get("perfil") or "visualizador")
+        if not usuario:
+            self.abrir_tela_login()
+            return
+
+        token = criar_token_visor3d(usuario, perfil, obra)
+        fragmento = urllib.parse.urlencode({"token": token})
+        caminho = f"/visor3d/index.html#{fragmento}"
+        endereco = f"{PUBLIC_BASE_URL}{caminho}" if PUBLIC_BASE_URL else caminho
+
+        async def sincronizar_e_voltar() -> None:
+            # O 3D grava pelo endpoint seguro. Recarregamos para que as telas
+            # Flet recebam imediatamente os status alterados no visualizador.
+            if await self._recarregar():
+                self.abrir_tela_andares(obra)
+
+        def voltar() -> None:
+            self.page.run_task(sincronizar_e_voltar)
+
+        cabecalho = self._cabecalho("Edifício 3D", voltar=voltar)
+        if fwv is not None:
+            visor: ft.Control = fwv.WebView(
+                url=endereco,
+                bgcolor=ft.Colors.BLUE_GREY_900,
+                expand=True,
+            )
+        else:
+            async def abrir_no_navegador(_: ft.Event[ft.Button]) -> None:
+                await ft.UrlLauncher().launch_url(
+                    endereco,
+                    web_only_window_name="_self",
+                )
+
+            visor = ft.Column(
+                controls=[
+                    ft.Icon(ft.Icons.VIEW_IN_AR, size=64, color=ft.Colors.BLUE_700),
+                    ft.Text(
+                        "O componente flet-webview não está instalado.",
+                        weight=ft.FontWeight.BOLD,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.Text(
+                        "Instale as dependências do requirements.txt ou abra "
+                        "o módulo no navegador.",
+                        color=ft.Colors.GREY_600,
+                        text_align=ft.TextAlign.CENTER,
+                    ),
+                    ft.FilledButton(
+                        content="Abrir visualização 3D",
+                        icon=ft.Icons.OPEN_IN_NEW,
+                        on_click=abrir_no_navegador,
+                    ),
+                ],
+                alignment=ft.MainAxisAlignment.CENTER,
+                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
+                spacing=14,
+                expand=True,
+            )
+
+        self._definir_tela(
+            cabecalho=cabecalho,
+            corpo=ft.Container(
+                content=visor,
+                clip_behavior=ft.ClipBehavior.HARD_EDGE,
+                border_radius=12,
+                expand=True,
+            ),
+        )
 
     def _formulario_novo_andar(self, obra: str) -> None:
         campo = ft.TextField(label="Nome/número do pavimento", autofocus=True)
@@ -3608,7 +4016,12 @@ class AppVistoria:
                 f"Relatorio_{self._slug_arquivo(obra)}_"
                 f"{self._slug_arquivo(atividade)}.pdf"
             )
-            await self.seletor_arquivo.save_file(
+            # Cria o servico na sessao ativa do navegador. Manter um FilePicker
+            # criado no __init__ pode deixa-lo sem listener apos reconexoes do PWA.
+            seletor_arquivo = ft.FilePicker()
+            self.page.overlay.append(seletor_arquivo)
+            self.page.update()
+            await seletor_arquivo.save_file(
                 dialog_title="Salvar relatório de vistoria",
                 file_name=nome,
                 file_type=ft.FilePickerFileType.CUSTOM,
@@ -3813,10 +4226,105 @@ async def main(page: ft.Page) -> None:
     await aplicativo.iniciar()
 
 
-if __name__ == "__main__":
-    ft.run(
+app = flet_fastapi.FastAPI(
+    title="App Vistoria Engenharia",
+    docs_url=None,
+    redoc_url=None,
+)
+_repo_api_visor = FirebaseRepository(FIREBASE_URL, FIREBASE_AUTH_TOKEN)
+
+
+@app.get("/healthz")
+async def verificar_saude() -> dict[str, str]:
+    return {"status": "ok"}
+
+
+@app.get("/api/visor3d/obra")
+async def obter_obra_visor3d(
+    response: Response,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Entrega apenas a obra autorizada; usuarios e historico ficam no servidor."""
+
+    claims = _claims_do_cabecalho(authorization)
+    try:
+        bruto = await asyncio.to_thread(_repo_api_visor.carregar)
+        banco, _ = normalizar_banco(bruto)
+        perfil = _autorizar_claims_no_banco(banco, claims)
+        snapshot = construir_snapshot_visor3d(
+            banco,
+            str(claims["obra"]),
+            perfil=perfil,
+        )
+    except PermissionError as erro:
+        raise HTTPException(status_code=403, detail=str(erro)) from erro
+    except KeyError as erro:
+        raise HTTPException(status_code=404, detail=str(erro.args[0])) from erro
+    except (FirebaseError, TypeError, ValueError) as erro:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Não foi possível consultar o Firebase: {erro}",
+        ) from erro
+
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return snapshot
+
+
+@app.put("/api/visor3d/atividade")
+async def gravar_atividade_visor3d(
+    atualizacao: AtualizacaoAtividadeVisor,
+    response: Response,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Grava uma atividade sem permitir que o navegador escolha outra obra."""
+
+    claims = _claims_do_cabecalho(authorization)
+    payload = atualizacao.model_dump()
+    try:
+        resultado = await asyncio.to_thread(
+            atualizar_atividade_pelo_visor,
+            _repo_api_visor,
+            claims,
+            payload,
+        )
+    except PermissionError as erro:
+        raise HTTPException(status_code=403, detail=str(erro)) from erro
+    except KeyError as erro:
+        raise HTTPException(status_code=404, detail=str(erro.args[0])) from erro
+    except ValueError as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from erro
+    except FirebaseError as erro:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Não foi possível gravar no Firebase: {erro}",
+        ) from erro
+
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return resultado
+
+
+# O mount da aplicacao Flet precisa ser o ultimo: sua rota raiz e um catch-all.
+app.mount(
+    "/",
+    flet_fastapi.app(
         main,
-        host="0.0.0.0",
-        port=int(os.environ.get("PORT", "8000")),
-        assets_dir="assets",
-    )
+        assets_dir=str(ASSETS_DIR),
+        app_name="App Vistoria Engenharia",
+        app_short_name="Vistoria",
+        app_description="Vistoria e auditoria de engenharia civil",
+    ),
+)
+
+
+if __name__ == "__main__":
+    if os.getenv("FLET_EXECUCAO_DIRETA", "0") == "1":
+        # Fallback sem as rotas 3D, util apenas para depuracao desktop.
+        ft.run(main, assets_dir=str(ASSETS_DIR))
+    else:
+        import uvicorn
+
+        uvicorn.run(
+            app,
+            host="0.0.0.0",
+            port=int(os.environ.get("PORT", "8000")),
+        )
