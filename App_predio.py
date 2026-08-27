@@ -1837,17 +1837,7 @@ class AppVistoria:
                 on_click=lambda _: self._abrir_menu_ferramentas(obra),
             )
 
-        acesso_visor = self._cartao_navegacao(
-            titulo="Explorar edifício em 3D",
-            subtitulo=(
-                f"{VISOR_3D_TOTAL_PAVIMENTOS} pavimentos • "
-                "01–07 à esquerda • 08–14 à direita"
-            ),
-            icone=ft.Icons.VIEW_IN_AR,
-            cor=ft.Colors.BLUE_800,
-            ao_clicar=lambda: self.abrir_tela_visor3d(obra),
-        )
-        rodape: list[ft.Control] = [acesso_visor, lista]
+        rodape: list[ft.Control] = [lista]
         if self.pode_editar:
             rodape.append(
                 ft.OutlinedButton(
@@ -1858,83 +1848,6 @@ class AppVistoria:
             )
         corpo = ft.Column(controls=rodape, expand=True)
         self._definir_tela(cabecalho=cabecalho, corpo=corpo, fab=fab)
-
-    def abrir_tela_visor3d(self, obra: str) -> None:
-        """Abre o modulo Three.js com um token curto limitado a esta obra."""
-
-        if obra not in self.banco_dados.get("obras", {}):
-            self._snack("Obra não encontrada.", erro=True)
-            self.abrir_tela_obras()
-            return
-        usuario = str(self.estado_sessao.get("usuario") or "")
-        perfil = str(self.estado_sessao.get("perfil") or "visualizador")
-        if not usuario:
-            self.abrir_tela_login()
-            return
-
-        token = criar_token_visor3d(usuario, perfil, obra)
-        fragmento = urllib.parse.urlencode({"token": token})
-        caminho = f"/visor3d/index.html#{fragmento}"
-        endereco = f"{PUBLIC_BASE_URL}{caminho}" if PUBLIC_BASE_URL else caminho
-
-        async def sincronizar_e_voltar() -> None:
-            # O 3D grava pelo endpoint seguro. Recarregamos para que as telas
-            # Flet recebam imediatamente os status alterados no visualizador.
-            if await self._recarregar():
-                self.abrir_tela_andares(obra)
-
-        def voltar() -> None:
-            self.page.run_task(sincronizar_e_voltar)
-
-        cabecalho = self._cabecalho("Edifício 3D", voltar=voltar)
-        if fwv is not None:
-            visor: ft.Control = fwv.WebView(
-                url=endereco,
-                bgcolor=ft.Colors.BLUE_GREY_900,
-                expand=True,
-            )
-        else:
-            async def abrir_no_navegador(_: ft.Event[ft.Button]) -> None:
-                await ft.UrlLauncher().launch_url(
-                    endereco,
-                    web_only_window_name="_self",
-                )
-
-            visor = ft.Column(
-                controls=[
-                    ft.Icon(ft.Icons.VIEW_IN_AR, size=64, color=ft.Colors.BLUE_700),
-                    ft.Text(
-                        "O componente flet-webview não está instalado.",
-                        weight=ft.FontWeight.BOLD,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.Text(
-                        "Instale as dependências do requirements.txt ou abra "
-                        "o módulo no navegador.",
-                        color=ft.Colors.GREY_600,
-                        text_align=ft.TextAlign.CENTER,
-                    ),
-                    ft.FilledButton(
-                        content="Abrir visualização 3D",
-                        icon=ft.Icons.OPEN_IN_NEW,
-                        on_click=abrir_no_navegador,
-                    ),
-                ],
-                alignment=ft.MainAxisAlignment.CENTER,
-                horizontal_alignment=ft.CrossAxisAlignment.CENTER,
-                spacing=14,
-                expand=True,
-            )
-
-        self._definir_tela(
-            cabecalho=cabecalho,
-            corpo=ft.Container(
-                content=visor,
-                clip_behavior=ft.ClipBehavior.HARD_EDGE,
-                border_radius=12,
-                expand=True,
-            ),
-        )
 
     def _formulario_novo_andar(self, obra: str) -> None:
         campo = ft.TextField(label="Nome/número do pavimento", autofocus=True)
@@ -4000,77 +3913,11 @@ async def baixar_pdf_temporario(token: str) -> Response:
         },
     )
 
-
-@app.get("/api/visor3d/obra")
-async def obter_obra_visor3d(
-    response: Response,
-    authorization: str | None = Header(default=None),
-) -> dict[str, Any]:
-    """Entrega apenas a obra autorizada; usuarios e historico ficam no servidor."""
-
-    claims = _claims_do_cabecalho(authorization)
-    try:
-        bruto = await asyncio.to_thread(_repo_api_visor.carregar)
-        banco, _ = normalizar_banco(bruto)
-        perfil = _autorizar_claims_no_banco(banco, claims)
-        snapshot = construir_snapshot_visor3d(
-            banco,
-            str(claims["obra"]),
-            perfil=perfil,
-        )
-    except PermissionError as erro:
-        raise HTTPException(status_code=403, detail=str(erro)) from erro
-    except KeyError as erro:
-        raise HTTPException(status_code=404, detail=str(erro.args[0])) from erro
-    except (FirebaseError, TypeError, ValueError) as erro:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Não foi possível consultar o Firebase: {erro}",
-        ) from erro
-
-    response.headers["Cache-Control"] = "no-store, max-age=0"
-    return snapshot
-
-
-@app.put("/api/visor3d/atividade")
-async def gravar_atividade_visor3d(
-    atualizacao: AtualizacaoAtividadeVisor,
-    response: Response,
-    authorization: str | None = Header(default=None),
-) -> dict[str, Any]:
-    """Grava uma atividade sem permitir que o navegador escolha outra obra."""
-
-    claims = _claims_do_cabecalho(authorization)
-    payload = atualizacao.model_dump()
-    try:
-        resultado = await asyncio.to_thread(
-            atualizar_atividade_pelo_visor,
-            _repo_api_visor,
-            claims,
-            payload,
-        )
-    except PermissionError as erro:
-        raise HTTPException(status_code=403, detail=str(erro)) from erro
-    except KeyError as erro:
-        raise HTTPException(status_code=404, detail=str(erro.args[0])) from erro
-    except ValueError as erro:
-        raise HTTPException(status_code=400, detail=str(erro)) from erro
-    except FirebaseError as erro:
-        raise HTTPException(
-            status_code=502,
-            detail=f"Não foi possível gravar no Firebase: {erro}",
-        ) from erro
-
-    response.headers["Cache-Control"] = "no-store, max-age=0"
-    return resultado
-
-
 # O mount da aplicacao Flet precisa ser o ultimo: sua rota raiz e um catch-all.
 app.mount(
     "/",
     flet_fastapi.app(
         main,
-        assets_dir=str(ASSETS_DIR),
         app_name="App Vistoria Engenharia",
         app_short_name="Vistoria",
         app_description="Vistoria e auditoria de engenharia civil",
@@ -4080,8 +3927,8 @@ app.mount(
 
 if __name__ == "__main__":
     if os.getenv("FLET_EXECUCAO_DIRETA", "0") == "1":
-        # Fallback sem as rotas 3D, util apenas para depuracao desktop.
-        ft.run(main, assets_dir=str(ASSETS_DIR))
+        # Fallback util apenas para depuracao desktop.
+        ft.run(main)
     else:
         import uvicorn
 
