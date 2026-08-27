@@ -1,5 +1,4 @@
 flet[all]==0.86.5
-flet-webview==0.86.5
 fpdf2==2.8.8
 fastapi>=0.116,<1.0
 uvicorn[standard]>=0.35,<1.0
