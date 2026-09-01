@@ -4021,6 +4021,7 @@ app.mount(
     "/",
     flet_fastapi.app(
         main,
+        assets_dir=str(ASSETS_DIR),
         app_name="App Vistoria Engenharia",
         app_short_name="Vistoria",
         app_description="Vistoria e auditoria de engenharia civil",
