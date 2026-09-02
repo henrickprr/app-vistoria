@@ -446,7 +446,8 @@ class FirebaseRepository:
 
     def carregar(self) -> Any:
         dados, _ = self._executar("GET")
-        return dados    def substituir(self, banco: dict[str, Any]) -> None:
+        return dados
+    def substituir(self, banco: dict[str, Any]) -> None:
         self._executar("PUT", banco)
 
     def atualizar(self, alteracoes: dict[str, Any]) -> None:
@@ -864,7 +865,8 @@ def calcular_metricas_obra(banco_dados: dict[str, Any], obra: str) -> dict[str, 
 
     for andar, locais in andares.items():
         if not isinstance(locais, dict):
-            continue            contador_comodo = por_comodo.setdefault(rotulo_tipo_local(local), Counter())
+            continue
+            contador_comodo = por_comodo.setdefault(rotulo_tipo_local(local), Counter())
             for atividade, dados in atividades.items():
                 dados_ok = _dados_atividade_seguros(dados)
                 status = dados_ok["status"]
@@ -1291,7 +1293,20 @@ class AppVistoria:
                 ],
                 actions_alignment=ft.MainAxisAlignment.END,
             )
-        )    @property
+        )
+
+    # ------------------------------- sessao e persistencia -----------------
+
+    def _aplicar_sessao(self, login: str) -> None:
+        registro = self.banco_dados["usuarios"][login]
+        self.estado_sessao.update(
+            {
+                "usuario": login,
+                "perfil": registro.get("perfil", "visualizador"),
+                "nome": registro.get("nome", login),
+            }
+        )
+    @property
     def pode_editar(self) -> bool:
         return self.estado_sessao.get("perfil") in {"admin", "editor"}
 
@@ -1738,18 +1753,7 @@ class AppVistoria:
             obra,
             voltar=self.abrir_tela_obras,
             acoes=acoes,
-
-    # ------------------------------- sessao e persistencia -----------------
-
-    def _aplicar_sessao(self, login: str) -> None:
-        registro = self.banco_dados["usuarios"][login]
-        self.estado_sessao.update(
-            {
-                "usuario": login,
-                "perfil": registro.get("perfil", "visualizador"),
-                "nome": registro.get("nome", login),
-            }
-        )        )
+        )
         lista = ft.ListView(expand=True, spacing=10, build_controls_on_demand=True)
 
         andares = self.banco_dados["obras"][obra]
@@ -2198,7 +2202,8 @@ class AppVistoria:
             conteudo=ft.Column(
                 controls=[campo_status, campo_obs, limpar_ao_finalizar],
                 tight=True,
-            ),            ao_confirmar=salvar,
+            ),
+            ao_confirmar=salvar,
             depois_de_salvar=lambda: self.abrir_tela_atividades(obra, andar, local),
         )
 
@@ -2645,7 +2650,8 @@ class AppVistoria:
                 for nome in sorted(
                     locais_customizados,
                     key=chave_ordenacao_natural,
-                )            )
+                )
+            )
 
             grade_locais = ft.GridView(
                 runs_count=3,
@@ -3088,7 +3094,8 @@ class AppVistoria:
             options=[
                 ft.DropdownOption(key="substituir", text="Substituir observação atual"),
                 ft.DropdownOption(key="acrescentar", text="Acrescentar ao texto atual"),
-            ],        )
+            ],
+        )
         escopo, obter_escopo = self._controles_escopo_lote(
             obra,
             primeiro_andar_selecionado=True,
@@ -3535,7 +3542,8 @@ class AppVistoria:
             content="Por Andar",
             expand=True,
             on_click=lambda _: mostrar("andar"),
-        )        botoes["comodo"] = ft.Button(
+        )
+        botoes["comodo"] = ft.Button(
             content="Por Cômodo",
             expand=True,
             on_click=lambda _: mostrar("comodo"),
