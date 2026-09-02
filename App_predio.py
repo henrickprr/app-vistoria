@@ -44,6 +44,10 @@ from fpdf import FPDF
 from fpdf.enums import XPos, YPos
 from fastapi import HTTPException, Response
 
+# Recursos opcionais de identidade visual da PWA. A ausencia da pasta nao
+# impede a inicializacao e mantem o icone padrao do Flet.
+PWA_ASSETS_DIR = Path(__file__).resolve().parent / "pwa_assets"
+
 FIREBASE_URL = os.getenv(
     "FIREBASE_URL",
     "https://app-vistoria-986c3-default-rtdb.firebaseio.com/banco_dados.json",
@@ -140,7 +144,7 @@ def converter_listas_para_dicionarios(objeto: Any) -> Any:
     if isinstance(objeto, list):
         return {
             str(indice): converter_listas_para_dicionarios(valor)
-            for indice, valor in enumerate(objeto)
+            for indice, enumerate(objeto)
             if valor is not None
         }
     if isinstance(objeto, dict):
@@ -4016,12 +4020,77 @@ async def baixar_pdf_temporario(token: str) -> Response:
         },
     )
 
+
+@app.get("/api/visor3d/obra")
+async def obter_obra_visor3d(
+    response: Response,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Entrega apenas a obra autorizada; usuarios e historico ficam no servidor."""
+
+    claims = _claims_do_cabecalho(authorization)
+    try:
+        bruto = await asyncio.to_thread(_repo_api_visor.carregar)
+        banco, _ = normalizar_banco(bruto)
+        perfil = _autorizar_claims_no_banco(banco, claims)
+        snapshot = construir_snapshot_visor3d(
+            banco,
+            str(claims["obra"]),
+            perfil=perfil,
+        )
+    except PermissionError as erro:
+        raise HTTPException(status_code=403, detail=str(erro)) from erro
+    except KeyError as erro:
+        raise HTTPException(status_code=404, detail=str(erro.args[0])) from erro
+    except (FirebaseError, TypeError, ValueError) as erro:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Não foi possível consultar o Firebase: {erro}",
+        ) from erro
+
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return snapshot
+
+
+@app.put("/api/visor3d/atividade")
+async def gravar_atividade_visor3d(
+    atualizacao: AtualizacaoAtividadeVisor,
+    response: Response,
+    authorization: str | None = Header(default=None),
+) -> dict[str, Any]:
+    """Grava uma atividade sem permitir que o navegador escolha outra obra."""
+
+    claims = _claims_do_cabecalho(authorization)
+    payload = atualizacao.model_dump()
+    try:
+        resultado = await asyncio.to_thread(
+            atualizar_atividade_pelo_visor,
+            _repo_api_visor,
+            claims,
+            payload,
+        )
+    except PermissionError as erro:
+        raise HTTPException(status_code=403, detail=str(erro)) from erro
+    except KeyError as erro:
+        raise HTTPException(status_code=404, detail=str(erro.args[0])) from erro
+    except ValueError as erro:
+        raise HTTPException(status_code=400, detail=str(erro)) from erro
+    except FirebaseError as erro:
+        raise HTTPException(
+            status_code=502,
+            detail=f"Não foi possível gravar no Firebase: {erro}",
+        ) from erro
+
+    response.headers["Cache-Control"] = "no-store, max-age=0"
+    return resultado
+
+
 # O mount da aplicacao Flet precisa ser o ultimo: sua rota raiz e um catch-all.
 app.mount(
     "/",
     flet_fastapi.app(
         main,
-        assets_dir=str(ASSETS_DIR),
+        assets_dir=str(PWA_ASSETS_DIR) if PWA_ASSETS_DIR.is_dir() else None,
         app_name="App Vistoria Engenharia",
         app_short_name="Vistoria",
         app_description="Vistoria e auditoria de engenharia civil",
@@ -4031,8 +4100,8 @@ app.mount(
 
 if __name__ == "__main__":
     if os.getenv("FLET_EXECUCAO_DIRETA", "0") == "1":
-        # Fallback util apenas para depuracao desktop.
-        ft.run(main)
+        # Fallback sem as rotas 3D, util apenas para depuracao desktop.
+        ft.run(main, assets_dir=str(PWA_ASSETS_DIR) if PWA_ASSETS_DIR.is_dir() else None)
     else:
         import uvicorn
 
