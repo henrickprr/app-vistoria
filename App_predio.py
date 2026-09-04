@@ -447,6 +447,7 @@ class FirebaseRepository:
     def carregar(self) -> Any:
         dados, _ = self._executar("GET")
         return dados
+
     def substituir(self, banco: dict[str, Any]) -> None:
         self._executar("PUT", banco)
 
@@ -504,6 +505,7 @@ def quebrar_observacao_pdf(
             linhas.append(atual)
             atual = ""
         else:
+            # Uma palavra maior que a celula e cortada sem entrar em loop.
             fragmento = ""
             for caractere in palavra:
                 if pdf.get_string_width(fragmento + caractere) <= largura_maxima:
@@ -527,6 +529,7 @@ def quebrar_observacao_pdf(
 
 
 def _cor_texto_contrastante(rgb: tuple[int, int, int]) -> tuple[int, int, int]:
+    # Luminancia relativa simplificada: branco nos fundos escuros, preto nos claros.
     r, g, b = rgb
     luminancia = (0.299 * r) + (0.587 * g) + (0.114 * b)
     return (255, 255, 255) if luminancia < 155 else (0, 0, 0)
@@ -542,7 +545,18 @@ def desenhar_celula_status(
     status: str,
     observacao: str,
 ) -> None:
-    """Desenha fundo, observacao e borda em camadas deterministicas."""
+    """Desenha fundo, observacao e borda em camadas deterministicas.
+
+    Esta e a correcao do bug original. Nao usamos ``get_x()/get_y()`` depois
+    de uma ``cell()`` que altera o cursor. O chamador fornece coordenadas
+    absolutas. A ordem de pintura e:
+
+      1. retangulo de fundo, sem borda;
+      2. texto por coordenadas absolutas, centralizado horizontal/verticalmente;
+      3. borda no perimetro, sem preenchimento.
+
+    Assim nenhuma celula preenchida e desenhada por cima da observacao.
+    """
 
     status_seguro = status if status in STATUS_PDF_RGB else "Não Iniciado"
     rgb = STATUS_PDF_RGB[status_seguro]
@@ -563,6 +577,7 @@ def desenhar_celula_status(
 
         altura_linha = 2.05
         altura_bloco = len(linhas) * altura_linha
+        # ``text`` recebe a linha de base, por isso somamos 1,55 mm.
         primeira_base = y + ((altura - altura_bloco) / 2) + 1.55
         for indice, linha in enumerate(linhas):
             largura_texto = pdf.get_string_width(linha)
@@ -610,6 +625,13 @@ def contar_status_matriz_pdf(
     servico: str,
     andares: Sequence[str] | None = None,
 ) -> Counter[str]:
+    """Conta os status apenas dos locais existentes e exibidos na matriz.
+
+    Uma posicao vazia entre as 14 colunas nao representa um apartamento real e
+    por isso nao entra no quantitativo. Se o local existe, mas ainda nao possui
+    a atividade escolhida, ele e contabilizado como ``Não Iniciado``.
+    """
+
     contador: Counter[str] = Counter({status: 0 for status in STATUS})
     obras = banco_dados.get("obras", {})
     andares_obra = obras.get(obra, {}) if isinstance(obras, dict) else {}
@@ -649,7 +671,11 @@ def gerar_pdf(
     caminho_arquivo: str | os.PathLike[str] | None = None,
     data_conferencia: str | None = None,
 ) -> bytes:
-    """Gera o PDF matricial e retorna seus bytes."""
+    """Gera o PDF matricial e retorna seus bytes.
+
+    O caminho_arquivo e opcional para manter compatibilidade com o fluxo
+    desktop antigo. No PWA os bytes sao servidos por uma rota temporaria.
+    """
 
     obras = banco_dados.get("obras", {})
     if obra not in obras or not isinstance(obras[obra], dict):
@@ -680,6 +706,8 @@ def gerar_pdf(
     limite_inferior_tabela = pdf.h - 13.0
 
     def desenhar_quantitativo() -> None:
+        """Desenha no rodape os totais correspondentes a cada cor da legenda."""
+
         itens = (
             ("Finalizado", "OK"),
             ("Não Conforme", "Pendência"),
@@ -866,6 +894,10 @@ def calcular_metricas_obra(banco_dados: dict[str, Any], obra: str) -> dict[str, 
     for andar, locais in andares.items():
         if not isinstance(locais, dict):
             continue
+        contador_andar = por_andar.setdefault(str(andar), Counter())
+        for local, atividades in locais.items():
+            if not isinstance(atividades, dict):
+                continue
             contador_comodo = por_comodo.setdefault(rotulo_tipo_local(local), Counter())
             for atividade, dados in atividades.items():
                 dados_ok = _dados_atividade_seguros(dados)
@@ -949,6 +981,8 @@ class AppVistoria:
         }
         self._lock_persistencia = asyncio.Lock()
 
+        # Flet >= 0.80 substituiu page.client_storage por SharedPreferences.
+        # O comportamento de "Manter-me logado" continua sendo local ao cliente.
         self.preferencias = ft.SharedPreferences()
 
         self.page.title = "App de Vistoria"
@@ -1184,8 +1218,13 @@ class AppVistoria:
     ) -> None:
         botao_salvar: ft.FilledButton
 
+        # Em telas estreitas o AlertDialog precisa descontar suas margens e
+        # paddings da largura do viewport. As colunas dos formularios nao
+        # devem impor uma largura fixa maior que esse espaco disponivel.
         largura_pagina = self.page.width
         if not isinstance(largura_pagina, (int, float)) or largura_pagina <= 0:
+            # Fallback conservador: evita estouro mesmo antes de o navegador
+            # informar sua largura real ao servidor Flet.
             largura_pagina = 360
         largura_conteudo = max(220, min(410, float(largura_pagina) - 64))
 
@@ -1205,11 +1244,14 @@ class AppVistoria:
                     if depois_de_salvar is not None:
                         depois_de_salvar()
                 else:
+                    # Formularios de lancamento recorrente permanecem abertos.
+                    # Mantemos o escopo selecionado e apenas preparamos os
+                    # campos necessarios para a proxima alteracao.
                     if depois_de_salvar is not None:
                         depois_de_salvar()
                     botao_salvar.disabled = False
                     self.page.update()
-            except Exception as erro:
+            except Exception as erro:  # noqa: BLE001 - fronteira de eventos da UI
                 botao_salvar.disabled = False
                 self.page.update(botao_salvar)
                 self._snack(f"Erro: {erro}", erro=True)
@@ -1306,6 +1348,7 @@ class AppVistoria:
                 "nome": registro.get("nome", login),
             }
         )
+
     @property
     def pode_editar(self) -> bool:
         return self.estado_sessao.get("perfil") in {"admin", "editor"}
@@ -1360,7 +1403,7 @@ class AppVistoria:
                 self._registrar_historico(acao, texto_detalhes)
                 alteracoes["historico"] = self.banco_dados["historico"]
                 await asyncio.to_thread(self.repo.atualizar, alteracoes)
-            except Exception as erro:
+            except Exception as erro:  # noqa: BLE001 - rollback de qualquer mutacao
                 self.banco_dados = copia_anterior
                 self._snack(f"Alteração desfeita: {erro}", erro=True)
                 return False
@@ -1428,6 +1471,8 @@ class AppVistoria:
             else:
                 await self.preferencias.remove(SESSION_USER_KEY)
 
+            # Migra silenciosamente uma senha legada em texto puro. Se a rede
+            # falhar, o login continua valido e a migracao sera tentada depois.
             if "senha" in registro and "senha_hash" not in registro:
                 registro_novo = {
                     chave: valor
@@ -2638,6 +2683,8 @@ class AppVistoria:
         filtro_local: ft.Dropdown | None = None
 
         if selecao_multipla_locais:
+            # A chave interna continua identificando a coluna do apartamento,
+            # mas o rotulo visual fica compacto: 01, 02, ... 14.
             opcoes_unidades: list[tuple[str, str]] = [
                 (f"__unidade_{numero:02d}__", f"{numero:02d}")
                 for numero in sorted(unidades_existentes)
@@ -2670,6 +2717,8 @@ class AppVistoria:
 
             controles_adicionais: list[ft.Control] = []
             for chave, rotulo in opcoes_adicionais:
+                # Corredor e nomes personalizados usam a largura completa;
+                # assim nunca disputam espaco com as colunas numericas.
                 check = ft.Checkbox(label=ft.Text(rotulo), value=False)
                 checks_locais[chave] = check
                 controles_adicionais.append(check)
@@ -2680,6 +2729,8 @@ class AppVistoria:
                 )
                 for check in checks_locais.values():
                     check.value = novo_valor
+                # Inclui tambem Corredor e eventuais locais personalizados,
+                # que ficam fora da grade numerica para nao cortar seus nomes.
                 self.page.update()
 
             controles_locais = [
@@ -2893,6 +2944,8 @@ class AppVistoria:
             )
 
         def preparar_proximo_lancamento() -> None:
+            # Preserva atividade, status, pavimentos e apartamentos marcados.
+            # A observacao e limpa para evitar sua repeticao acidental.
             campo_obs.value = ""
             campo_tarefa.error_text = None
 
@@ -3151,6 +3204,8 @@ class AppVistoria:
             )
 
         def preparar_proximo_lancamento() -> None:
+            # A selecao permanece ativa para permitir varias anotacoes em
+            # sequencia; apenas o texto digitado e limpo.
             campo_obs.value = ""
 
         self._mostrar_formulario(
@@ -3578,6 +3633,7 @@ class AppVistoria:
                 self.page.update(campo)
                 return False
             atividade = campo.value
+            # A tela e aberta pelo callback posterior para evitar dois dialogs.
             self._atividade_relatorio_pendente = atividade
             return True
 
@@ -3612,6 +3668,7 @@ class AppVistoria:
             andares = sorted(
                 self.banco_dados["obras"][obra], key=chave_ordenacao_natural
             )
+            # Copia consistente: o worker nao le o dicionario enquanto a UI o altera.
             fotografia = copy.deepcopy(self.banco_dados)
             conteudo = await asyncio.to_thread(
                 gerar_pdf,
@@ -3628,6 +3685,9 @@ class AppVistoria:
             caminho = f"/downloads/pdf/{token}"
             endereco = f"{PUBLIC_BASE_URL}{caminho}" if PUBLIC_BASE_URL else caminho
 
+            # O FilePicker e o UrlLauncher usam controles de servico que podem
+            # falhar no Flet Web. A propriedade url do botao e aberta diretamente
+            # pelo cliente e baixa o arquivo pela rota FastAPI abaixo.
             botao.disabled = False
             botao.content = "Baixar PDF"
             botao.icon = ft.Icons.DOWNLOAD
@@ -3636,7 +3696,7 @@ class AppVistoria:
             self.page.update(botao)
             download_pronto = True
             self._snack("PDF pronto. Toque em ‘Baixar PDF’ para salvar.")
-        except Exception as erro:
+        except Exception as erro:  # noqa: BLE001 - fronteira de exportacao
             self._snack(f"Não foi possível gerar o PDF: {erro}", erro=True)
         finally:
             if not download_pronto:
@@ -3645,6 +3705,7 @@ class AppVistoria:
                 try:
                     self.page.update(botao)
                 except RuntimeError:
+                    # O usuario pode sair da tela enquanto o arquivo e preparado.
                     pass
 
     def abrir_tela_relatorio(self, obra: str, atividade: str) -> None:
@@ -3872,14 +3933,14 @@ async def baixar_pdf_temporario(token: str) -> Response:
         },
     )
 
-
+# O mount da aplicacao Flet precisa ser o ultimo: sua rota raiz e um catch-all.
 app.mount(
     "/",
     flet_fastapi.app(
         main,
         assets_dir=str(PWA_ASSETS_DIR) if PWA_ASSETS_DIR.is_dir() else None,
         app_name="App Vistoria Engenharia",
-        app_short_name="Vistoria",
+        app_short_name="Golden Flat",
         app_description="Vistoria e auditoria de engenharia civil",
     ),
 )
@@ -3887,6 +3948,7 @@ app.mount(
 
 if __name__ == "__main__":
     if os.getenv("FLET_EXECUCAO_DIRETA", "0") == "1":
+        # Fallback util apenas para depuracao desktop.
         ft.run(main)
     else:
         import uvicorn
